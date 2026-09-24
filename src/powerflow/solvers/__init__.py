@@ -1,3 +1,24 @@
+"""
+Power-flow solvers.
+
+Every solver exposes the same entry point::
+
+    solve(case, options=None, ybus=None) -> PowerFlowResult
+
+so they can be swapped freely in the benchmarks.  They differ only in the set of
+nonlinear equations they iterate on:
+
+=========  ==================================  ===========================================
+Key        Module                              Residual
+=========  ==================================  ===========================================
+``SNR``    :mod:`.standard_nr`                 power mismatch, polar state (the benchmark)
+``PNR``    :mod:`.simplified_nr`               current mismatch, polar state (**base paper**)
+``PNR+``   :mod:`.simplified_nr` (augmented)   as above, PV reactive power as an unknown
+``RCI``    :mod:`.rect_current_nr`             current mismatch, rectangular state
+``FDLF``   :mod:`.fast_decoupled`              decoupled power mismatch, constant B', B''
+``GS``     :mod:`.gauss_seidel`                nodal voltage fixed point
+=========  ==================================  ===========================================
+"""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -41,11 +62,13 @@ SOLVERS: Dict[str, Callable[..., PowerFlowResult]] = {
     "GS": gauss_seidel.solve,
 }
 
+#: The two methods the base paper compares (its Table 5 and Figures 4-10).
 PAPER_SOLVERS: Dict[str, Callable[..., PowerFlowResult]] = {
     "SNR": standard_nr.solve,
     "PNR": simplified_nr.solve,
 }
 
+#: Human-readable names, for figure legends and report tables.
 SOLVER_LABELS = {
     "SNR": "Standard NR (power mismatch)",
     "PNR": "Simplified NR (current mismatch)",
@@ -53,6 +76,7 @@ SOLVER_LABELS = {
     "RCI": "Rectangular current injection",
     "FDLF-XB": "Fast decoupled (XB)",
     "FDLF-BX": "Fast decoupled (BX)",
+    "GS": "Gauss-Seidel",
 }
 
 
