@@ -16,7 +16,7 @@
 \large (Kulworawanichpong, 2010)}
 \author{Anika Morshed\\
 Diganta Saha Tirtha\\
-Add kore ne\\
+Jahedul Islam Nayeem\\
 }
 \date{\today}
 
@@ -468,5 +468,281 @@ three times as many and Gauss--Seidel one to three orders of magnitude more.
 The ordering confirms that the four solvers span the intended range of the
 cost-per-iteration against iterations-to-convergence trade-off.
 
+\section{Experimental Evaluation and Benchmarking}
+\label{sec:evaluation}
+
+To assess the practical value of the simplified Newton--Raphson formulation, the
+present study evaluates the method across multiple dimensions: canonical
+benchmark test systems, scaling with network size, comparison against
+alternative solvers, memory overhead, and robustness under increasing system
+stress. These evaluations are designed to distinguish algorithmic advantages
+from implementation artifacts and to place the proposed formulation within the
+broader landscape of power-flow solution methods.
+
+\subsection{Benchmark Test Cases}
+\label{sec:test-cases}
+
+The first evaluation stage reproduces the classical test-system benchmark
+described in the base paper and extends it to the standard IEEE library cases
+used in the project implementation. Each case is solved from a flat start using
+a consistent tolerance and convergence criterion, and results are compared in
+terms of iteration count, solution quality, and elapsed runtime. The benchmark
+includes the small systems used in the original study as well as representative
+larger networks that expose the behavior of the method beyond the regime
+considered in the source publication.
+
+The principal objective of this stage is to verify that the simplified
+formulation preserves the correct operating point while reducing the
+per-iteration computational burden. In particular, we examine whether the
+method converges to the same voltage solution as the standard Newton--Raphson
+approach and whether any discrepancy in iteration count or runtime is explained
+by the formulation itself rather than by numerical inconsistency.
+
+Table~\ref{tab:testcases-results} summarizes the benchmark results across the
+test systems, including the number of iterations required to converge and the
+measured time ratio between the standard and simplified formulations.
+Figure~\ref{fig:testcases-time-ratio} shows the relative timing behavior, while
+Figure~\ref{fig:testcases-iterations} reports the iteration burden for each
+case.
+
+\begin{table}[H]
+\centering
+\caption{Power-flow solution and convergence results on the benchmark test systems.}
+\label{tab:testcases-results}
+\begin{tabular}{lcccc}
+\toprule
+Case & $n_{\text{bus}}$ & SNR iterations & PNR iterations & Time ratio (SNR/PNR) \\
+\midrule
+case5\_stagg & 5 & 5 & 4 & 1.54 \\
+case6ww & 6 & 5 & 5 & 1.46 \\
+case24\_ieee\_rts & 24 & 7 & 8 & 1.13 \\
+case30\_ieee & 30 & 5 & 5 & 1.33 \\
+case57\_ieee & 57 & 4 & 3 & 1.73 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/03_fig5_time_ratio.png}
+    \caption{Relative runtime of the standard and simplified Newton methods across the benchmark systems.}
+    \label{fig:testcases-time-ratio}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/03_iterations.png}
+    \caption{Iteration count required by each method to achieve the prescribed voltage tolerance.}
+    \label{fig:testcases-iterations}
+\end{figure}
+
+\subsection{Scalability Analysis}
+\label{sec:scalability}
+
+The second evaluation stage examines how the methods scale as the network size
+increases beyond the original paper's test regime. This is important because a
+cost advantage that is marginal on small cases may become significant in larger
+grids, whereas fixed overheads can dominate the runtime on very small systems.
+To distinguish these effects, the study evaluates the methods from a 3-bus case
+up to 300-bus systems and fits the observed growth of runtime and iteration
+count as functions of network size.
+
+The analysis shows that the simplified formulation retains the same Newton-type
+convergence pattern while reducing the cost of the derivative evaluation, but
+the extent of the benefit depends on the balance between arithmetic cost and
+fixed overhead. In the dense formulation, the per-iteration derivative cost grows
+more slowly for the simplified method, whereas the full solve time reflects both
+iteration count and the cost of factorization.
+
+Figure~\ref{fig:scale-time} illustrates the total solve time as a function of
+system size, and Figure~\ref{fig:scale-iterations} reports the corresponding
+iteration counts. The fitted growth exponents in Table~\ref{tab:scale-exponents}
+provide a compact summary of the empirical scaling behavior, separating the
+asymptotic trend from the fixed-overhead regime that becomes relevant at
+smaller system sizes.
+
+\begin{table}[H]
+\centering
+\caption{Empirical growth exponents for runtime and iteration count with respect to network size.}
+\label{tab:scale-exponents}
+\begin{tabular}{lccc}
+\toprule
+Solver & Time exponent & Large-system time exponent & Iteration exponent \\
+\midrule
+SNR & 2.14 & 2.31 & 0.08 \\
+PNR & 1.90 & 2.06 & 0.18 \\
+PNR+ & 1.96 & 2.12 & 0.09 \\
+RCI & 2.03 & 2.18 & 0.11 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/04_time_vs_size.png}
+    \caption{Total solve time versus system size for the Newton-based formulations and related alternatives.}
+    \label{fig:scale-time}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/04_iterations_vs_size.png}
+    \caption{Iteration count as a function of network size. The results indicate that the performance gap is not driven solely by the number of iterations, but by the cost of each update.}
+    \label{fig:scale-iterations}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/04_derivative_ratio_vs_size.png}
+    \caption{Relative speed-up of the Jacobian derivative stage as system size increases.}
+    \label{fig:scale-derivative}
+\end{figure}
+
+\subsection{Method Comparison}
+\label{sec:method-comparison}
+
+To place the simplified formulation in context, the study compares it against
+several alternative power-flow approaches, including the standard
+Newton--Raphson method, the augmented PV formulation, the rectangular
+current-injection Newton method, the fast decoupled load-flow method, and
+Gauss--Seidel. This comparison is not intended to establish a single
+universally superior solver, but rather to show which properties are gained and
+which are traded when the method is simplified.
+
+The comparison focuses on three quantities: convergence rate, total execution
+time, and the stability of the iteration under increasing load. The fast
+decoupled method and Gauss--Seidel are expected to exhibit lower per-iteration
+cost, but their reduced rate of convergence usually leads to an overall
+disadvantage in high-accuracy settings. By contrast, the Newton-based methods
+maintain a stronger convergence rate while differing mainly in the structure
+and cost of their Jacobian formation.
+
+Figure~\ref{fig:method-time} compares the total solve time across all methods on
+the test systems, and Figure~\ref{fig:method-iterations} summarizes the
+iteration counts. The convergence characteristics of the representative 30- and
+118-bus systems are shown in Figures~\ref{fig:method-conv-30}
+and~\ref{fig:method-conv-118}. These plots clarify that the simplified
+formulation improves arithmetic efficiency without abandoning the underlying
+Newton framework, while the more aggressive approximation methods reduce cost at
+the price of slower or less robust convergence.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/05_time_all_methods.png}
+    \caption{Total solve time of all evaluated solvers across the benchmark cases.}
+    \label{fig:method-time}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/05_iterations_all_methods.png}
+    \caption{Iteration counts for all methods under the same convergence criterion.}
+    \label{fig:method-iterations}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/05_convergence_30.png}
+    \caption{Convergence behavior of the evaluated solvers on the IEEE 30-bus system.}
+    \label{fig:method-conv-30}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/05_convergence_118.png}
+    \caption{Convergence behavior of the evaluated solvers on the IEEE 118-bus system.}
+    \label{fig:method-conv-118}
+\end{figure}
+
+\subsection{Memory Footprint and Linear-System Size}
+\label{sec:memory}
+
+The memory evaluation distinguishes between structural footprint and measured
+runtime allocation. Structural footprint refers to the dimension and sparsity of
+the Jacobian or reduced linear system that must be assembled and factorized at
+each iteration. Measured footprint refers to the peak Python-level allocation
+observed during a solve using the tracing allocator. This separation is
+important because the simplified formulation changes the arithmetic operations in
+the Jacobian but does not necessarily alter the dimension of the underlying
+linear system. As a result, memory advantages should be evaluated carefully and
+not inferred solely from the theoretical formulation.
+
+The experimental results show that the standard Newton and simplified Newton
+methods have essentially identical memory requirements when solved at the same
+system size, because the dominant memory cost is determined by the factorization
+of the reduced Jacobian rather than by the algebraic form of its entries. In
+contrast, the fast decoupled formulation and the rectangular current-injection
+formulation exhibit different memory signatures, which reflects their distinct
+linear-system structure and the real-valued arithmetic used in the latter case.
+These findings indicate that the proposed simplification is primarily a
+time-optimization strategy rather than a space-optimization strategy.
+
+Figure~\ref{fig:memory-peak} reports the measured peak memory usage, while
+Figure~\ref{fig:memory-jacobian-size} compares the dimensions of the linear
+systems solved by the methods. Figure~\ref{fig:memory-storage} shows the effect
+of dense versus sparse storage on the Jacobian and admittance matrix.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/06_peak_memory.png}
+    \caption{Peak memory allocation during a full solve for each method.}
+    \label{fig:memory-peak}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/06_jacobian_size.png}
+    \caption{Dimension of the linear systems that must be solved at each iteration.}
+    \label{fig:memory-jacobian-size}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/06_dense_vs_sparse_memory.png}
+    \caption{Impact of dense versus sparse storage on Jacobian memory footprint.}
+    \label{fig:memory-storage}
+\end{figure}
+
+\subsection{Robustness and Stability Under Increasing Load}
+\label{sec:robustness}
+
+A central engineering question is whether the simplified formulation remains
+reliable when the system is stressed beyond its nominal operating point. To
+address this, the study evaluates the solvers under gradually increasing load
+factors and records the largest load level at which each method continues to
+converge from a flat start. This analysis captures a practical notion of
+robustness: methods that converge on nominal operating conditions are not
+necessarily robust near the voltage-stability boundary.
+
+The loadability sweep shows that the divergence points of the methods are not
+identical. While the network voltage-stability limit sets a common physical
+ceiling for several cases, the simplified Newton variant exhibits earlier loss of
+convergence on some larger systems owing to the lagged treatment of PV reactive
+powers. This result highlights a key trade-off: the simplified formulation
+reduces the per-iteration cost, but it can become less stable as the system
+approaches a stressed operating point. The augmented PV formulation partially
+mitigates this behavior, suggesting that the residual degradation is not
+inherent to the simplified Newton approach itself but to the specific
+approximation used to handle PV-bus reactive power updates.
+
+Figure~\ref{fig:robustness-heatmap} presents the iteration-count surface over
+load factor, and Figure~\ref{fig:robustness-limit} reports the maximum load
+level successfully solved by each method. Taken together, these figures provide
+a direct measure of method robustness as opposed to nominal-case performance
+alone.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/07_iterations_heatmap_57.png}
+    \caption{Iteration-count surface for the IEEE 57-bus system as the load factor increases.}
+    \label{fig:robustness-heatmap}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{results/figures/07_max_loading.png}
+    \caption{Largest loading factor at which each solver remains convergent from a flat start.}
+    \label{fig:robustness-limit}
+\end{figure}
 
 \end{document}

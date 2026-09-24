@@ -1,0 +1,16 @@
+case,solver,max_load_contiguous,max_load_any,n_failures,censored
+case30_ieee,SNR,5.0,5.0,0,True
+case30_ieee,PNR,5.0,5.0,0,True
+case30_ieee,PNR+,5.0,5.0,0,True
+case30_ieee,RCI,5.0,5.0,0,True
+case30_ieee,FDLF-XB,5.0,5.0,0,True
+case57_ieee,SNR,1.8,1.8,16,False
+case57_ieee,PNR,1.8,1.8,16,False
+case57_ieee,PNR+,1.8,1.8,16,False
+case57_ieee,RCI,1.8,1.8,16,False
+case57_ieee,FDLF-XB,1.8,1.8,16,False
+case118_ieee,SNR,3.0,3.0,10,False
+case118_ieee,PNR,1.6,1.6,17,False
+case118_ieee,PNR+,2.0,2.0,15,False
+case118_ieee,RCI,3.0,3.0,10,False
+case118_ieee,FDLF-XB,3.0,3.0,10,False
