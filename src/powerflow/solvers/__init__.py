@@ -4,7 +4,7 @@ from dataclasses import replace
 from typing import Callable, Dict
 
 from ..results import PowerFlowResult
-from . import fast_decoupled, rect_current_nr, simplified_nr, standard_nr
+from . import fast_decoupled, gauss_seidel, rect_current_nr, simplified_nr, standard_nr
 from .base import SolverOptions, solve_with_q_limits
 
 __all__ = [
@@ -13,10 +13,11 @@ __all__ = [
     "standard_nr",
     "simplified_nr",
     "rect_current_nr",
+    "fast_decoupled",
+    "gauss_seidel",
     "SOLVERS",
     "PAPER_SOLVERS",
     "get_solver",
-    "fast_decoupled",
 ]
 
 
@@ -25,6 +26,11 @@ def _pnr_augmented(case, options=None, ybus=None) -> PowerFlowResult:
     return simplified_nr.solve(case, options, ybus)
 
 
+def _fdlf_bx(case, options=None, ybus=None) -> PowerFlowResult:
+    return fast_decoupled.solve(case, options, ybus, variant="BX")
+
+
+#: Every solver, keyed by the short label used in tables and figures.
 SOLVERS: Dict[str, Callable[..., PowerFlowResult]] = {
     "SNR": standard_nr.solve,
     "PNR": simplified_nr.solve,
@@ -32,6 +38,7 @@ SOLVERS: Dict[str, Callable[..., PowerFlowResult]] = {
     "RCI": rect_current_nr.solve,
     "FDLF-XB": fast_decoupled.solve,
     "FDLF-BX": _fdlf_bx,
+    "GS": gauss_seidel.solve,
 }
 
 PAPER_SOLVERS: Dict[str, Callable[..., PowerFlowResult]] = {
