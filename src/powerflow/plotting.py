@@ -124,7 +124,6 @@ def save(fig, name: str, out_dir: Optional[Path] = None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{name}.png"
     fig.savefig(path)
-    fig.savefig(out_dir / f"{name}.pdf")
     plt.close(fig)
     return path
 
