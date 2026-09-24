@@ -28,6 +28,11 @@ python -m pytest tests/test_jacobians.py
 python scripts/01_worked_example_3bus.py
 ```
 
+4. Run the flop counting:
+```sh
+python scripts/02_flop_counting.py
+```
+
 ## Repository layout
 
 ```
