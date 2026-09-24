@@ -1,0 +1,128 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{caption}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{hyperref}
+\usepackage{float}
+
+\sisetup{round-mode=places, round-precision=4, scientific-notation=true}
+
+\title{\textbf{CSE402: Numerical Analysis, Simulation and Modeling Sessional}\\Simplified Newton--Raphson Power-Flow Implementation\\
+\large (Kulworawanichpong, 2010)}
+\author{Anika Morshed\\
+Diganta Saha Tirtha\\
+Add kore ne\\
+}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+
+\section{Overview}
+Place holder for now\\
+
+
+\section{Bus Admittance Matrix}
+Table~\ref{tab:ybus} compares the computed bus admittance matrix $Y_{bus}$
+against the matrix printed in Section 4 of the paper. Agreement is to the four
+decimal places the paper itself reports; the residual \texttt{abs\_err\_mag}
+is consistent with the paper's own rounding, not with a modelling error.
+
+\begin{table}[h]
+\centering
+\caption{Computed vs.\ paper $Y_{bus}$ entries (magnitude in p.u., angle in degrees).}
+\label{tab:ybus}
+\begin{tabular}{l S[table-format=2.5] S[table-format=2.4] S[table-format=-4.5] S[table-format=-4.2] S[scientific-notation=true]}
+\toprule
+{Entry} & {Computed mag.} & {Paper mag.} & {Computed ang.} & {Paper ang.} & {Abs.\ error (mag.)} \\
+\midrule
+$Y_{11}$ & 53.85165 & 53.8517 & -68.19859 & -68.20 & 5.19287e-05 \\
+$Y_{12}$ & 22.36068 & 22.3607 & 116.56505 & 116.57 & 2.02250e-05 \\
+$Y_{13}$ & 31.62278 & 31.6228 & 108.43495 & 108.43 & 2.33983e-05 \\
+$Y_{22}$ & 58.13777 & 58.1378 & -63.43495 & -63.43 & 3.25850e-05 \\
+$Y_{23}$ & 35.77709 & 35.7771 & 116.56505 & 116.57 & 1.23600e-05 \\
+$Y_{33}$ & 67.23095 & 67.2310 & -67.24902 & -67.25 & 5.47441e-05 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Iteration-by-Iteration Reproduction}
+Table~\ref{tab:iterations} checks the current mismatch vector $F$, the
+Jacobian $J$, and the correction vector $\Delta x$ produced by the PNR
+solver at each of the paper's three worked iterations, against the values
+printed in Section 4. \texttt{max\_abs\_diff} is the largest entry-wise
+difference; \texttt{max\_rel\_diff} normalises that difference by the largest
+entry of the paper's own vector or matrix, absorbing the paper's four-decimal
+rounding.
+
+\begin{table}[h]
+\centering
+\caption{Per-iteration agreement with Section 4 of the paper.}
+\label{tab:iterations}
+\begin{tabular}{c l S[scientific-notation=true] S[scientific-notation=true]}
+\toprule
+{Iteration} & {Quantity} & {Max.\ abs.\ diff.} & {Max.\ rel.\ diff.} \\
+\midrule
+1 & mismatch & 2.30769e-05 & 8.06885e-06 \\
+1 & Jacobian & 0.00000e+00 & 0.00000e+00 \\
+1 & $\Delta x$ & 3.65613e-05 & 7.94812e-04 \\
+2 & mismatch & 4.33705e-05 & 5.25067e-04 \\
+2 & Jacobian & 4.20418e-05 & 6.64784e-07 \\
+2 & $\Delta x$ & 4.24941e-05 & 3.86310e-02 \\
+3 & mismatch & 4.31065e-07 & 1.06964e-03 \\
+3 & Jacobian & 3.88991e-05 & 6.14610e-07 \\
+3 & $\Delta x$ & 3.75201e-08 & 3.67844e-03 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Converged Solution (Paper's Table 2)}
+Table~\ref{tab:table2} compares the converged solution of both methods
+(standard NR, SNR, and the proposed method, PNR) against the paper's own
+Table 2. This work iterates to a $10^{-10}$ p.u.\ voltage tolerance, tighter
+than the paper's own \SI{1e-6}{} p.u.\ criterion and the three hand iterations
+the paper prints; the small residual gap in the angle columns reflects the
+paper reporting an intermediate (third-iteration) value rather than a fully
+converged one.
+
+\begin{table}[h]
+\centering
+\caption{Paper Table 2 -- power-flow solution for the 3-bus example.}
+\label{tab:table2}
+\begin{tabular}{l S[table-format=-1.6] S[table-format=-1.5] S[table-format=-1.6] S[table-format=-1.5]}
+\toprule
+{Item} & {SNR (this work)} & {SNR (paper)} & {PNR (this work)} & {PNR (paper)} \\
+\midrule
+$|V_2|$ (p.u.)     & 0.971680  & 0.97168 & 0.971680  & 0.97168 \\
+$\delta_2$ (deg)   & -2.696454 & -2.696  & -2.696454 & -2.698  \\
+$|V_3|$ (p.u.)     & 1.040000  & 1.04000 & 1.040000  & 1.04000 \\
+$\delta_3$ (deg)   & -0.498803 & -0.4988 & -0.498803 & -0.4979 \\
+$Q_3$ (p.u.)       & 1.461769  & 1.46170 & 1.461769  & 1.46180 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Solution Convergence (Paper's Figure 4)}
+\begin{figure}[H]
+    \centering    \includegraphics[width=0.8\linewidth]{figures/01_fig4_convergence.png}
+    \caption{Caption}
+    \label{fig:convergence}
+\end{figure}
+Figure~\ref{fig:convergence} reproduces the paper's Figure 4: the maximum
+mismatch at each iteration for both methods, on a logarithmic scale. The SNR
+residual is a maximum power mismatch (p.u.\ MVA); the PNR residual is a
+maximum current mismatch (p.u.\ A). Both series show the characteristic
+roughly-doubling number of correct digits per iteration associated with
+quadratic Newton convergence; PNR requires two additional iterations to reach
+machine precision, consistent with its reactive power at the PV bus being
+re-estimated from the current voltage guess at the start of every iteration
+rather than solved for directly.
+
+
+
+\end{document}
