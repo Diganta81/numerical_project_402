@@ -108,3 +108,92 @@ def paper_figure2(n):
     """
     n = np.asarray(n, dtype=float)
     return 6.0 * n, 4.0 * n + 4.0
+
+
+# ---------------------------------------------------------------------------
+# 2. Audited element-by-element counts of the same formulas
+# ---------------------------------------------------------------------------
+
+#: Multiplications per off-diagonal ``(k, i)`` pair, filling **all four**
+#: sub-matrices at once and reusing every shared sub-expression.
+#:
+#: Standard NR, ``alpha = theta_ki + delta_i - delta_k``, 9 products::
+#:
+#:     u  = |V_i| * |Y_ki|      (1)     m * sin(alpha)   -> J1[k,i] and the J1[k,k] sum
+#:     w  = |V_k| * |Y_ki|      (1)     m * cos(alpha)   -> J3[k,i] and the J3[k,k] sum
+#:     m  = |V_k| * u           (1)     w * cos(alpha)   -> J2[k,i]
+#:                                      w * sin(alpha)   -> J4[k,i]
+#:                                      u * cos(alpha)   -> the J2[k,k] sum
+#:                                      u * sin(alpha)   -> the J4[k,k] sum
+#:
+#: Simplified NR, ``beta = theta_ki + delta_i``, 5 products::
+#:
+#:     u = |V_i| * |Y_ki|       (1)     u      * sin(beta) -> J1[k,i]
+#:                                      u      * cos(beta) -> J3[k,i]
+#:                                      |Y_ki| * cos(beta) -> J2[k,i]
+#:                                      |Y_ki| * sin(beta) -> J4[k,i]
+#:
+#: Two separate effects make the simplified column shorter.  The summand has no
+#: ``|V_k|`` factor, which removes ``w`` and ``m``; and -- the larger saving --
+#: the simplified diagonals are *closed-form expressions* (equations 10, 12, 14,
+#: 16) rather than sums over the row, so an off-diagonal pair contributes nothing
+#: to them at all, while the standard method must accumulate four separate row
+#: sums.
+OFF_DIAGONAL_COST = {"SNR": 9, "PNR": 5}
+
+#: Multiplications per bus for the four diagonal entries.
+#:
+#: Standard NR (4): ``|V_k||Y_kk|``, doubled, times ``cos(theta_kk)`` and
+#: ``sin(theta_kk)``.  The row sums themselves are additions, already paid for
+#: in :data:`OFF_DIAGONAL_COST`.
+#:
+#: Simplified NR (13): ``|V_k||Y_kk|`` times sine and cosine (3),
+#: ``|Y_kk|`` times sine and cosine (2), ``|S_k| = sqrt(P^2+Q^2)`` (2),
+#: ``a_k = |S_k|/|V_k|`` (1) times sine and cosine of ``gamma_k`` (2), and
+#: ``b_k = a_k/|V_k|`` (1) times the same pair (2).
+#:
+#: So the simplified method is cheaper per *edge* and dearer per *bus*.  How the
+#: two balance out depends on the average nodal degree -- see :func:`ratio_vs_degree`.
+DIAGONAL_COST = {"SNR": 4, "PNR": 13}
+
+#: Multiplications per ``(k, i)`` term of the mismatch vectors.
+#: Standard NR (equations 21, 22): ``|V_k||V_i||Y_ki|`` then times cos and sin.
+#: Simplified NR (equations 4, 5): ``|V_i||Y_ki|`` then times cos and sin.
+MISMATCH_COST = {"SNR": 4, "PNR": 3}
+
+
+@dataclass
+class FlopCount:
+    """Per-iteration multiplication counts under one model."""
+
+    method: str
+    n: int
+    jacobian_diagonal: float
+    jacobian_off_diagonal: float
+    mismatch: float
+
+    @property
+    def jacobian(self) -> float:
+        return self.jacobian_diagonal + self.jacobian_off_diagonal
+
+    @property
+    def total(self) -> float:
+        return self.jacobian + self.mismatch
+
+
+def audited_jacobian(method: str, n: int, n_off: Optional[int] = None) -> FlopCount:
+    """Honest per-element count for ``method`` on an ``n``-bus system.
+
+    ``n_off`` is the number of off-diagonal entries actually stored; it defaults
+    to the dense population ``(n-1)(n-2)`` used by the paper.
+    """
+    if method not in OFF_DIAGONAL_COST:
+        raise KeyError(f"no audited model for {method!r}")
+    n_off = (n - 1) * (n - 2) if n_off is None else n_off
+    return FlopCount(
+        method=method,
+        n=n,
+        jacobian_diagonal=DIAGONAL_COST[method] * (n - 1),
+        jacobian_off_diagonal=OFF_DIAGONAL_COST[method] * n_off,
+        mismatch=MISMATCH_COST[method] * (n_off + n),
+    )
