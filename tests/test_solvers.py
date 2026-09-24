@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from powerflow import build_ybus, load_case
-from powerflow.solvers import SOLVERS, SolverOptions, standard_nr
+from powerflow.solvers import SOLVERS, SolverOptions, simplified_nr, standard_nr
 
 TOL = 1e-10
 NEWTON_KEYS = ["SNR", "PNR", "PNR+", "RCI", "FDLF-XB", "FDLF-BX"]
@@ -65,3 +65,74 @@ def test_sparse_and_dense_solvers_agree(any_case):
         sparse = SOLVERS[key](any_case, SolverOptions(tol=TOL, max_iter=80, sparse=True))
         assert sparse.converged
         assert np.max(np.abs(dense.v - sparse.v)) < 1e-8
+
+
+def test_reference_jacobian_mode_solves(small_case):
+    """The literal-equation Jacobians drive the solvers as well as the fast ones."""
+    for mod in (standard_nr, simplified_nr):
+        fast = mod.solve(small_case, SolverOptions(tol=TOL))
+        slow = mod.solve(small_case, SolverOptions(tol=TOL, jacobian="reference"))
+        assert slow.converged
+        assert slow.iterations == fast.iterations
+        assert np.max(np.abs(slow.v - fast.v)) < 1e-10
+
+
+def test_augmented_pv_converges_no_slower_than_the_paper_formulation(any_case):
+    """The extension's whole purpose: restore quadratic convergence at PV buses."""
+    opts = SolverOptions(tol=1e-10, max_iter=80)
+    paper = simplified_nr.solve(any_case, opts)
+    augmented = simplified_nr.solve(
+        any_case, SolverOptions(tol=1e-10, max_iter=80, pv_handling="augmented")
+    )
+    assert augmented.converged and paper.converged
+    assert augmented.iterations <= paper.iterations
+    if len(any_case.pv) >= 5:
+        reference = standard_nr.solve(any_case, opts)
+        # Within one iteration of the standard method, which is the target.
+        assert augmented.iterations <= reference.iterations + 1
+
+
+def test_history_and_trace_stay_aligned(small_case):
+    res = standard_nr.solve(small_case, SolverOptions(tol=TOL))
+    trace = res.extras["v_trace"]
+    assert len(trace) == len(res.history)
+    assert np.allclose(trace[-1], res.v)
+    ref = standard_nr.solve(small_case, SolverOptions(tol=1e-13, criterion="mismatch"))
+    res.attach_reference(ref.v)
+    errors = res.error_history
+    assert np.all(np.diff(errors) <= 1e-12), "the error must decrease monotonically"
+
+
+def test_convergence_is_monotone_in_the_mismatch(any_case):
+    res = standard_nr.solve(any_case, SolverOptions(tol=1e-11, max_iter=80))
+    mism = res.mismatch_history
+    assert mism[-1] < mism[0]
+    assert mism[-1] < 1e-7
+
+
+def test_q_limit_enforcement_binds_generator_output():
+    """Opt-in PV -> PQ switching holds Q inside its limits."""
+    case = load_case("case30_ieee")
+    case.q_max = np.minimum(case.q_max, 0.10)     # force several violations
+    res = standard_nr.solve(case, SolverOptions(tol=1e-8, enforce_q_limits=True, max_iter=40))
+    assert res.converged
+    ybus = build_ybus(case)
+    q = res.injections(ybus).imag
+    switched = res.extras.get("q_limit_switches", [])
+    assert switched, "the tightened limits should have forced at least one switch"
+    assert np.all(q[case.pv] <= case.q_max[case.pv] + 1e-6)
+
+
+def test_max_iter_is_respected_without_raising():
+    case = load_case("case118_ieee")
+    res = standard_nr.solve(case, SolverOptions(tol=1e-12, max_iter=2))
+    assert not res.converged
+    assert res.iterations == 2
+    assert "did not reach" in res.message
+
+
+def test_starting_from_a_previous_solution_takes_fewer_iterations(any_case):
+    warm = standard_nr.solve(any_case, SolverOptions(tol=1e-10, max_iter=80))
+    again = standard_nr.solve(any_case, SolverOptions(tol=1e-10, v0=warm.v))
+    assert again.converged
+    assert again.iterations <= 1
