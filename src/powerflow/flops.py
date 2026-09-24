@@ -247,3 +247,31 @@ def speedup(n, model: str = "paper") -> np.ndarray:
             [audited_jacobian("SNR", int(k)).total / audited_jacobian("PNR", int(k)).total for k in np.atleast_1d(n)]
         )
     raise ValueError(f"unknown model {model!r}")
+
+
+# ---------------------------------------------------------------------------
+# 3. Tabulation helper
+# ---------------------------------------------------------------------------
+def flop_dataframe(n_values: Iterable[int]):
+    """Tidy ``pandas`` table of every model, for the report."""
+    import pandas as pd
+
+    rows = []
+    for n in n_values:
+        js, jp = paper_figure1(n)
+        ms, mp = paper_figure2(n)
+        a_s, a_p = audited_jacobian("SNR", n), audited_jacobian("PNR", n)
+        rows.append(
+            {
+                "n": n,
+                "paper_J_SNR": js,
+                "paper_J_PNR": jp,
+                "paper_mis_SNR": ms,
+                "paper_mis_PNR": mp,
+                "paper_ratio": (js + ms) / (jp + mp),
+                "audit_total_SNR": a_s.total,
+                "audit_total_PNR": a_p.total,
+                "audit_ratio": a_s.total / a_p.total,
+            }
+        )
+    return pd.DataFrame(rows)
