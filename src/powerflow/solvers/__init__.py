@@ -4,7 +4,7 @@ from dataclasses import replace
 from typing import Callable, Dict
 
 from ..results import PowerFlowResult
-from . import simplified_nr, standard_nr
+from . import rect_current_nr, simplified_nr, standard_nr
 from .base import SolverOptions, solve_with_q_limits
 
 __all__ = [
@@ -12,6 +12,7 @@ __all__ = [
     "solve_with_q_limits",
     "standard_nr",
     "simplified_nr",
+    "rect_current_nr",
     "SOLVERS",
     "PAPER_SOLVERS",
     "get_solver",
@@ -27,6 +28,7 @@ SOLVERS: Dict[str, Callable[..., PowerFlowResult]] = {
     "SNR": standard_nr.solve,
     "PNR": simplified_nr.solve,
     "PNR+": _pnr_augmented,
+    "RCI": rect_current_nr.solve,
 }
 
 PAPER_SOLVERS: Dict[str, Callable[..., PowerFlowResult]] = {
@@ -38,6 +40,7 @@ SOLVER_LABELS = {
     "SNR": "Standard NR (power mismatch)",
     "PNR": "Simplified NR (current mismatch)",
     "PNR+": "Simplified NR + augmented PV",
+    "RCI": "Rectangular current injection",
 }
 
 
