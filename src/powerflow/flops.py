@@ -197,3 +197,53 @@ def audited_jacobian(method: str, n: int, n_off: Optional[int] = None) -> FlopCo
         jacobian_off_diagonal=OFF_DIAGONAL_COST[method] * n_off,
         mismatch=MISMATCH_COST[method] * (n_off + n),
     )
+
+
+def sparse_jacobian(method: str, n: int, nnz: int) -> FlopCount:
+    """Audited count over the true sparsity pattern of ``Y_bus``.
+
+    ``nnz`` is the total number of stored entries of ``Y_bus`` (diagonal
+    included), as returned by :func:`powerflow.ybus.sparsity`.
+    """
+    return audited_jacobian(method, n, n_off=max(nnz - n, 0))
+
+
+def ratio_vs_degree(degree):
+    """Predicted Jacobian-cost ratio ``SNR/PNR`` as a function of nodal degree.
+
+    With ``d`` off-diagonal entries per row the two costs per bus are
+    ``9d + 4`` and ``5d + 13``, so the ratio is
+
+    .. math::  r(d) = \\frac{9d + 4}{5d + 13}
+
+    which rises from below 1 for a radial network to the dense asymptote
+    ``9/5 = 1.8``.  Break-even (``r = 1``) sits at ``d = 2.25``: a network
+    sparser than that gives the simplified Jacobian *no* advantage, because its
+    closed-form diagonals cost more than the row sums they replace.  Real
+    transmission grids sit at ``d ~ 2.5-3.7`` (see the ``02_sparse_flops``
+    table), while the dense formulation the paper counts has ``d = n - 1``.
+    """
+    d = np.asarray(degree, dtype=float)
+    return (OFF_DIAGONAL_COST["SNR"] * d + DIAGONAL_COST["SNR"]) / (
+        OFF_DIAGONAL_COST["PNR"] * d + DIAGONAL_COST["PNR"]
+    )
+
+
+#: Nodal degree at which the two Jacobians cost the same.
+BREAK_EVEN_DEGREE = (DIAGONAL_COST["PNR"] - DIAGONAL_COST["SNR"]) / (
+    OFF_DIAGONAL_COST["SNR"] - OFF_DIAGONAL_COST["PNR"]
+)
+
+
+def speedup(n, model: str = "paper") -> np.ndarray:
+    """Predicted per-iteration cost ratio ``SNR / PNR``."""
+    n = np.asarray(n, dtype=float)
+    if model == "paper":
+        js, jp = paper_figure1(n)
+        ms, mp = paper_figure2(n)
+        return (js + ms) / (jp + mp)
+    if model == "audited":
+        return np.array(
+            [audited_jacobian("SNR", int(k)).total / audited_jacobian("PNR", int(k)).total for k in np.atleast_1d(n)]
+        )
+    raise ValueError(f"unknown model {model!r}")
