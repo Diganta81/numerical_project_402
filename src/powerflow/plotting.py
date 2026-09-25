@@ -1,14 +1,12 @@
 from __future__ import annotations
-
 from pathlib import Path
 from typing import Dict, Mapping, Optional, Sequence
-
 import matplotlib
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+# --- ink ---------------------------------------------------------------------
 SURFACE = "#fcfcfb"
 INK = "#0b0b0b"
 INK_SECONDARY = "#52514e"
@@ -99,6 +97,13 @@ TITLE_PT = 11.5
 
 
 def _finish(fig, ax, title: str, subtitle: str = "") -> None:
+    """Left-aligned title with an optional wrapped explanatory subtitle.
+
+    The title is placed by an offset *in points* above the subtitle block rather
+    than at a fixed figure fraction.  That is what keeps the two from colliding:
+    ``savefig`` crops with ``bbox_inches="tight"``, so a figure-fraction position
+    moves under the subtitle as soon as the subtitle wraps onto a third line.
+    """
     if not subtitle:
         ax.set_title(title, color=INK, loc="left", pad=8)
         ax.set_axisbelow(True)
@@ -124,6 +129,7 @@ def save(fig, name: str, out_dir: Optional[Path] = None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{name}.png"
     fig.savefig(path)
+    fig.savefig(out_dir / f"{name}.pdf")
     plt.close(fig)
     return path
 
@@ -133,6 +139,7 @@ def save(fig, name: str, out_dir: Optional[Path] = None) -> Path:
 # ---------------------------------------------------------------------------
 def plot_flops(n, series: Mapping[str, np.ndarray], title: str, ylabel: str,
                name: str, out_dir=None) -> Path:
+    """Log-log FLOPs-versus-bus-count plot (base paper Figures 1 and 2)."""
     fig, ax = plt.subplots(figsize=(6.2, 4.2))
     for key, values in series.items():
         st = style(key) if key in METHOD_COLOR else {"color": SLOTS[len(ax.lines) % len(SLOTS)]}
@@ -147,6 +154,7 @@ def plot_flops(n, series: Mapping[str, np.ndarray], title: str, ylabel: str,
 def plot_convergence(histories: Mapping[str, Sequence[float]], title: str, name: str,
                      ylabel: str = "Maximum voltage error (p.u.)", out_dir=None,
                      start_at: int = 1, subtitle: str = "") -> Path:
+    """Semi-log convergence plot (base paper Figures 4 and 6-10)."""
     fig, ax = plt.subplots(figsize=(6.2, 4.2))
     for key, hist in histories.items():
         hist = np.asarray(hist, dtype=float)
@@ -204,7 +212,12 @@ def plot_scaling(x, series: Mapping[str, Sequence[float]], title: str, ylabel: s
                  out_dir=None, subtitle: str = "", loglog: bool = True,
                  xlog: bool = False,
                  point_labels: Optional[Sequence[str]] = None) -> Path:
+    """Measured cost versus system size (extension: scale testing).
 
+    ``loglog`` puts both axes on a log scale.  ``xlog`` gives a log x-axis with a
+    linear y-axis, which is what a count-like quantity (iterations, a ratio)
+    needs when the bus counts span two decades.
+    """
     fig, ax = plt.subplots(figsize=(6.4, 4.4))
     plot = ax.loglog if loglog else (ax.semilogx if xlog else ax.plot)
     for key, values in series.items():
@@ -224,7 +237,7 @@ def plot_scaling(x, series: Mapping[str, Sequence[float]], title: str, ylabel: s
 def plot_heatmap(matrix, row_labels, col_labels, title: str, name: str,
                  cbar_label: str = "", out_dir=None, subtitle: str = "",
                  fmt: str = "{:.0f}", mask_value=None) -> Path:
-    
+    """Single-hue sequential heatmap (extension: robustness sweep)."""
     from matplotlib.colors import LinearSegmentedColormap
 
     blues = LinearSegmentedColormap.from_list(
