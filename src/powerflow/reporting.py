@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import sys
 from pathlib import Path
 from typing import Optional
@@ -24,6 +23,7 @@ def _fmt(value, precision: int = 4) -> str:
 
 
 def to_markdown(df, precision: int = 4, index: bool = False) -> str:
+    """Render a DataFrame as a GitHub-flavoured Markdown table."""
     frame = df.reset_index() if index else df
     cols = list(frame.columns)
     header = "| " + " | ".join(str(c) for c in cols) + " |"
@@ -37,14 +37,23 @@ def to_markdown(df, precision: int = 4, index: bool = False) -> str:
 def save_table(df, name: str, title: str = "", notes: str = "",
                out_dir: Optional[Path] = None, precision: int = 4,
                index: bool = False) -> Path:
+    """Write ``df`` to ``results/tables/<name>.csv`` and ``.md``."""
     out_dir = Path(out_dir) if out_dir else TABLE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / f"{name}.csv"
     df.to_csv(csv_path, index=index)
+
+    body = [f"# {title or name}", ""]
+    if notes:
+        body += [notes, ""]
+    body += [to_markdown(df, precision=precision, index=index), ""]
+    (out_dir / f"{name}.md").write_text("\n".join(body), encoding="utf-8")
     return csv_path
 
 
 class Section:
+    """Small console helper so each script prints a readable transcript."""
+
     def __init__(self, title: str, stream=sys.stdout):
         self.title = title
         self.stream = stream
@@ -62,6 +71,7 @@ def banner(text: str) -> None:
 
 
 def print_table(df, precision: int = 4, index: bool = False) -> None:
+    """Print a DataFrame using the same formatting as the Markdown output."""
     frame = df.reset_index() if index else df
     cols = [str(c) for c in frame.columns]
     rendered = [[_fmt(row[c], precision) for c in frame.columns] for _, row in frame.iterrows()]
@@ -74,6 +84,7 @@ def print_table(df, precision: int = 4, index: bool = False) -> None:
 
 
 def voltage_table(case, v, precision: int = 4):
+    """Bus-by-bus solution table, the format of the paper's Table 3."""
     import pandas as pd
 
     kind = {1: "PQ", 2: "PV", 3: "slack"}
