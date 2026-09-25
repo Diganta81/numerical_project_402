@@ -1,16 +1,6 @@
-"""
-Power-system case container.
-
-A PowerCase is a solver-agnostic description of a network: per-unit scheduled
-injections, bus classification and branch data. Every solver consumes this one
-object, so the solvers stay directly comparable -- they differ only in the
-equations they iterate on, never in the data they see.
-"""
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Dict
-
 import numpy as np
 
 # MATPOWER bus-type codes
@@ -22,11 +12,6 @@ ISOLATED = 4
 
 @dataclass
 class PowerCase:
-    """An n-bus power system in per-unit on base_mva.
-
-    Bus quantities are indexed by internal bus index 0..n-1; bus_ids maps back
-    to the external bus numbers used by the data file.
-    """
 
     name: str
     base_mva: float
@@ -87,13 +72,7 @@ class PowerCase:
         return self.p_sch + 1j * self.q_sch
 
     def flat_start(self) -> np.ndarray:
-        """Flat-start voltage vector.
 
-        Magnitudes are 1.0 except at slack and PV buses, where the set-point
-        is enforced. Angles are the slack bus angle everywhere -- not zero --
-        so cases with a non-zero reference angle (e.g. IEEE 118-bus, 30 deg)
-        still start from a genuinely flat state.
-        """
         vm = np.ones(self.n_bus)
         fixed = np.concatenate([self.slack, self.pv])
         vm[fixed] = self.vm_set[fixed]
@@ -102,12 +81,6 @@ class PowerCase:
         return vm * np.exp(1j * va)
 
     def scaled(self, load_factor: float = 1.0, gen_factor: float | None = None) -> "PowerCase":
-        """Return a copy with all injections scaled -- used for stress testing.
-
-        load_factor multiplies negative (net-load) injections; gen_factor
-        multiplies positive (net-generation) injections and defaults to
-        load_factor so the power balance stays roughly intact.
-        """
         import copy
 
         gen_factor = load_factor if gen_factor is None else gen_factor
