@@ -1,12 +1,11 @@
 from __future__ import annotations
-
 import numpy as np
-
 from powerflow import build_ybus
-from powerflow.solvers import simplified_nr, standard_nr
+from powerflow.solvers import rect_current_nr, simplified_nr, standard_nr
 
 
 def perturbed_states(case, v, eps: float):
+    """Yield ``(index, v_plus, v_minus)`` over the polar unknowns of ``case``."""
     pvpq, pq = case.pvpq, case.pq
     vm, va = np.abs(v), np.angle(v)
     for j, k in enumerate(pvpq):                 # angle unknowns
@@ -22,6 +21,7 @@ def perturbed_states(case, v, eps: float):
 
 
 def numeric_jacobian(case, ybus, v, residual, eps: float = 1e-6) -> np.ndarray:
+    """Central-difference Jacobian ``d(residual)/dx`` over the polar unknowns."""
     n_x = len(case.pvpq) + len(case.pq)
     jac = np.zeros((len(residual(v)), n_x))
     for j, sign, v_pert in perturbed_states(case, v, eps):
@@ -29,15 +29,17 @@ def numeric_jacobian(case, ybus, v, residual, eps: float = 1e-6) -> np.ndarray:
     return jac
 
 
+# --------------------------------------------------------------------------
 def test_standard_reference_matches_vectorized(small_case):
     ybus = build_ybus(small_case)
-    v = small_case.flat_start() * np.exp(1j * 0.05)      
+    v = small_case.flat_start() * np.exp(1j * 0.05)      # move off the flat start
     fast = standard_nr.jacobian_vectorized(small_case, ybus, v)
     ref = standard_nr.jacobian_reference(small_case, ybus, v)
     assert np.allclose(fast, ref, rtol=1e-10, atol=1e-9 * max(1.0, np.max(np.abs(ref))))
 
 
 def test_simplified_reference_matches_vectorized(small_case):
+    """Equations (9)-(16) verbatim versus the compact complex form."""
     ybus = build_ybus(small_case)
     v = small_case.flat_start() * np.exp(1j * 0.05)
     s_eff = simplified_nr.effective_schedule(small_case, ybus, v)
@@ -47,6 +49,7 @@ def test_simplified_reference_matches_vectorized(small_case):
 
 
 def test_standard_jacobian_matches_finite_differences(small_case):
+    """J = d(P_cal, Q_cal)/dx, the sign convention of paper equation (18)."""
     case, ybus = small_case, build_ybus(small_case)
     v = case.flat_start() * np.exp(1j * 0.03)
 
@@ -61,8 +64,12 @@ def test_standard_jacobian_matches_finite_differences(small_case):
 
 
 def test_simplified_jacobian_matches_finite_differences(small_case):
+    """The paper's J is -dF/dx, with F the current mismatch of equation (2)."""
     case, ybus = small_case, build_ybus(small_case)
     v = case.flat_start() * np.exp(1j * 0.03)
+    # Hold the PV reactive powers fixed: the lagged update is not part of the
+    # derivative the paper writes down, and differentiating through it would
+    # test a different matrix.
     s_eff = simplified_nr.effective_schedule(case, ybus, v)
 
     def residual(v_now):
@@ -84,3 +91,36 @@ def test_sparse_matches_dense(small_case):
         dense = mod.jacobian(case, dense_y, v, *args)
         sparse = mod.jacobian(case, sparse_y, v, *args)
         assert np.allclose(dense, sparse.toarray(), atol=1e-9 * max(1.0, np.max(np.abs(dense))))
+
+
+def test_rectangular_jacobian_matches_finite_differences(small_case):
+    """The rectangular formulation uses the ordinary convention J = dR/dx."""
+    case, ybus = small_case, build_ybus(small_case)
+    v = case.flat_start() * np.exp(1j * 0.03)
+    q = case.q_sch.copy()
+    ns, pv = case.pvpq, case.pv
+    n_ns, n_pv = len(ns), len(pv)
+    if n_pv:
+        q[pv] = (v * np.conj(ybus @ v)).imag[pv]
+
+    def stacked(v_now, q_now):
+        r_re, r_im, r_v = rect_current_nr.residuals(case, ybus, v_now, q_now)
+        return np.concatenate([r_re[ns], r_im[ns], r_v])
+
+    analytic = rect_current_nr.jacobian(case, ybus, v, q)
+    eps = 1e-6
+    numeric = np.zeros_like(analytic)
+    for j, k in enumerate(ns):                       # de and df
+        for col, delta in ((j, eps), (n_ns + j, 1j * eps)):
+            vp, vm_ = v.copy(), v.copy()
+            vp[k] += delta
+            vm_[k] -= delta
+            numeric[:, col] = (stacked(vp, q) - stacked(vm_, q)) / (2 * eps)
+    for j, k in enumerate(pv):                       # dQ
+        qp, qm = q.copy(), q.copy()
+        qp[k] += eps
+        qm[k] -= eps
+        numeric[:, 2 * n_ns + j] = (stacked(v, qp) - stacked(v, qm)) / (2 * eps)
+
+    scale = max(1.0, np.max(np.abs(analytic)))
+    assert np.allclose(analytic, numeric, atol=1e-4 * scale)
