@@ -1,47 +1,3 @@
-r"""
-Standard Newton-Raphson power flow -- the *power mismatch* formulation (SNR).
-
-This is the benchmark the base paper measures against.  The unknowns are the
-voltage angles of every non-slack bus and the voltage magnitudes of every PQ
-bus; the residuals are the real and reactive power mismatches
-
-.. math::
-
-    \Delta P_k = P_{\mathrm{sch},k} - P_{\mathrm{cal},k}, \qquad
-    \Delta Q_k = Q_{\mathrm{sch},k} - Q_{\mathrm{cal},k}
-
-with (base paper, equations 21 and 22)
-
-.. math::
-
-    P_{\mathrm{cal},k} = \sum_i |V_k V_i Y_{ki}| \cos(\theta_{ki}+\delta_i-\delta_k)
-
-    Q_{\mathrm{cal},k} = -\sum_i |V_k V_i Y_{ki}| \sin(\theta_{ki}+\delta_i-\delta_k)
-
-The update equation is the paper's equation (18),
-
-.. math::
-
-    \begin{bmatrix}\Delta P\\ \Delta Q\end{bmatrix} =
-    \begin{bmatrix}J_1 & J_2\\ J_3 & J_4\end{bmatrix}
-    \begin{bmatrix}\Delta\delta\\ \Delta|V|\end{bmatrix}
-
-followed by ``x <- x + dx`` (equation 17).  Note that ``J_2`` and ``J_4`` hold
-the *unnormalised* derivatives with respect to the magnitude (not
-``|V| d/d|V|``), matching the paper's equations and therefore its
-floating-point operation counts in Table 1.
-
-Two Jacobian builders are provided and are numerically identical:
-
-``reference``
-    A literal transcription of the textbook element formulas -- equations
-    (19) and (20) of the paper and their J2/J3/J4 counterparts.
-``vectorized``
-    The equivalent complex-analytic form dS/ddelta, dS/d|V|.  This is what the
-    benchmarks run, and it is the only one with a sparse path.
-
-``tests/test_jacobians.py`` asserts that the two agree to machine precision.
-"""
 from __future__ import annotations
 
 from typing import Optional, Tuple
@@ -67,36 +23,17 @@ METHOD = "Standard NR (power mismatch)"
 SHORT = "SNR"
 
 
-# --------------------------------------------------------------- residuals
 def power_mismatch(case: PowerCase, ybus, v: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Full-length real and reactive power mismatch vectors, p.u.
-
-    Implements equations (21) and (22) through ``S = V . conj(Y V)``.
-    """
     s_cal = s_injected(ybus, v)
     return case.p_sch - s_cal.real, case.q_sch - s_cal.imag
 
 
 def mismatch_vector(case: PowerCase, ybus, v: np.ndarray) -> np.ndarray:
-    """Right-hand side of equation (18): ``[dP over pv+pq; dQ over pq]``."""
     dp, dq = power_mismatch(case, ybus, v)
     return np.concatenate([dp[case.pvpq], dq[case.pq]])
 
 
-# --------------------------------------------------------------- Jacobians
 def derivative_matrices(case: PowerCase, ybus, v: np.ndarray, s_eff=None):
-    """Return ``(dS/ddelta, dS/d|V|)`` as full complex matrices.
-
-    Obtained by differentiating ``S = V . conj(Y V)``; the real and imaginary
-    parts supply the four sub-matrices of equation (18).  ``case`` and ``s_eff``
-    are unused and present only so that this has the same signature as
-    :func:`powerflow.solvers.simplified_nr.derivative_matrices`, which lets the
-    benchmark time the two head to head.
-
-    This is the step the paper's FLOP analysis is about; the subsequent slicing
-    (:func:`powerflow.solvers.base.assemble_reduced`) is identical for both
-    methods.
-    """
     ibus = ybus @ v
     vnorm = v / np.abs(v)
     if sp.issparse(ybus):
@@ -110,7 +47,6 @@ def derivative_matrices(case: PowerCase, ybus, v: np.ndarray, s_eff=None):
 
 
 def jacobian(case: PowerCase, ybus, v: np.ndarray, mode: str = "vectorized"):
-    """Assemble the Jacobian of equation (18)."""
     if mode == "reference":
         return jacobian_reference(case, ybus, v)
     return jacobian_vectorized(case, ybus, v)
@@ -122,35 +58,6 @@ def jacobian_vectorized(case: PowerCase, ybus, v: np.ndarray):
 
 
 def jacobian_reference(case: PowerCase, ybus, v: np.ndarray) -> np.ndarray:
-    r"""Literal element-by-element Jacobian (dense only).
-
-    With ``alpha_ki = theta_ki + delta_i - delta_k``, the off-diagonal entries
-    (paper equation 19 and its siblings), for ``k != i``, are
-
-    .. math::
-
-        \partial P_k/\partial\delta_i = -|V_kV_iY_{ki}|\sin\alpha_{ki}
-
-        \partial P_k/\partial|V_i|    =  |V_kY_{ki}|\cos\alpha_{ki}
-
-        \partial Q_k/\partial\delta_i = -|V_kV_iY_{ki}|\cos\alpha_{ki}
-
-        \partial Q_k/\partial|V_i|    = -|V_kY_{ki}|\sin\alpha_{ki}
-
-    and the diagonal entries (paper equation 20 and its siblings) are
-
-    .. math::
-
-        \partial P_k/\partial\delta_k = \sum_{i\ne k}|V_kV_iY_{ki}|\sin\alpha_{ki}
-
-        \partial P_k/\partial|V_k| = 2|V_kY_{kk}|\cos\theta_{kk}
-                                     + \sum_{i\ne k}|V_iY_{ki}|\cos\alpha_{ki}
-
-        \partial Q_k/\partial\delta_k = \sum_{i\ne k}|V_kV_iY_{ki}|\cos\alpha_{ki}
-
-        \partial Q_k/\partial|V_k| = -2|V_kY_{kk}|\sin\theta_{kk}
-                                     - \sum_{i\ne k}|V_iY_{ki}|\sin\alpha_{ki}
-    """
     y_mag, theta = ybus_polar(ybus)
     vm, va = np.abs(v), np.angle(v)
     n = case.n_bus
@@ -159,9 +66,9 @@ def jacobian_reference(case: PowerCase, ybus, v: np.ndarray) -> np.ndarray:
     alpha = theta + va[None, :] - va[:, None]
     sin_a, cos_a = np.sin(alpha), np.cos(alpha)
 
-    vv = vm[:, None] * vm[None, :] * y_mag    # |V_k V_i Y_ki|
-    vk_y = vm[:, None] * y_mag                # |V_k Y_ki|
-    vi_y = vm[None, :] * y_mag                # |V_i Y_ki|
+    vv = vm[:, None] * vm[None, :] * y_mag    
+    vk_y = vm[:, None] * y_mag                
+    vi_y = vm[None, :] * y_mag                
     off = ~np.eye(n, dtype=bool)
 
     j1 = -vv * sin_a
@@ -187,9 +94,7 @@ def jacobian_reference(case: PowerCase, ybus, v: np.ndarray) -> np.ndarray:
     )
 
 
-# ------------------------------------------------------------------- solver
 def solve(case: PowerCase, options: Optional[SolverOptions] = None, ybus=None) -> PowerFlowResult:
-    """Solve the power flow of ``case`` with the standard NR method."""
     options = (options or SolverOptions()).validate()
     if options.enforce_q_limits:
         from dataclasses import replace

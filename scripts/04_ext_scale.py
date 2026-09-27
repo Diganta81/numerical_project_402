@@ -1,31 +1,3 @@
-"""
-Extension 1 -- scale testing beyond the paper's test systems.
-
-The project proposal asks to "extend evaluations beyond small networks to
-large-scale grids (e.g. IEEE 118-bus)".  The base paper stops at 57 buses, which
-is exactly the size range where the effect it is arguing about is still buried
-under fixed per-call overheads.  This script runs the same two methods (plus the
-augmented-PV variant) from 3 to 300 buses and fits how each cost actually grows.
-
-Three separate questions are asked, because they have different answers:
-
-1. Does the **iteration count** stay flat as the system grows?  For the standard
-   method, yes.  For the paper's method, no -- and the reason is the lagged PV
-   reactive powers, which is what the augmented variant fixes.
-2. Does the **Jacobian derivative evaluation** get relatively cheaper, as the
-   paper's FLOP analysis predicts?  Yes, and the advantage grows with size.
-3. Does **total solve time** follow?  Only once the system is big enough for
-   arithmetic to dominate interpreter overhead.
-
-Outputs
--------
-``results/tables/04_scale_results.{csv,md}``      full sweep
-``results/tables/04_scaling_exponents.{csv,md}``  fitted growth exponents
-``results/figures/04_iterations_vs_size.png``
-``results/figures/04_time_vs_size.png``
-``results/figures/04_derivative_ratio_vs_size.png``
-``results/figures/04_dense_vs_sparse.png``
-"""
 from __future__ import annotations
 
 import _bootstrap  # noqa: F401
@@ -46,9 +18,6 @@ SOLVER_KEYS = ["SNR", "PNR", "PNR+", "RCI"]
 REPEATS = 15
 
 
-#: Below this size a solve is dominated by fixed NumPy/interpreter call overhead
-#: rather than arithmetic, so a growth exponent fitted through the small systems
-#: is meaningless (it comes out near 1 no matter what the algorithm costs).
 ASYMPTOTIC_FROM = 30
 
 

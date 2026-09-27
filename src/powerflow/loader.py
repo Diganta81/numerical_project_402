@@ -1,10 +1,3 @@
-"""
-Load MATPOWER/PYPOWER-format JSON case files into PowerCase.
-
-The on-disk format is the plain MATPOWER column layout so the vendored IEEE
-cases in data/ stay comparable with the standard library everyone else
-benchmarks against. All the interpretation happens here, once.
-"""
 from __future__ import annotations
 
 import json

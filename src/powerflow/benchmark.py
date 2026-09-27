@@ -1,27 +1,3 @@
-"""
-Timing and memory measurement.
-
-The base paper reports wall-clock times on 2003-era hardware (Table 4), which
-cannot be reproduced.  What *can* be reproduced is the shape of the result: the
-ratio of standard to simplified NR time, how the ratio moves with system size,
-and how the two compare against FDLF and Gauss-Seidel.  This module makes those
-measurements defensible:
-
-* every solve is repeated and the **minimum** is reported (the least
-  noise-contaminated sample), with the median and spread kept alongside;
-* ``Y_bus`` is built once, outside the timed region, so the measurement isolates
-  the iteration loop -- which is the only thing the two methods differ in;
-* a warm-up solve is discarded so that NumPy/SciPy first-call overheads and
-  CPU frequency ramp-up do not land in the first sample;
-* **time per iteration** is reported next to total time, because the two methods
-  do not always take the same number of iterations and the paper's claim is
-  specifically about the cost *of one iteration*.
-
-Memory is measured with :mod:`tracemalloc`, which counts Python-level
-allocations (including NumPy array headers and SciPy factorisation buffers) but
-not the interpreter baseline.  It is reported as the peak increment above the
-pre-solve level.
-"""
 from __future__ import annotations
 
 import gc
@@ -126,13 +102,6 @@ def measure_memory(
 
 
 def jacobian_footprint(case: PowerCase, solver_key: str, options: SolverOptions) -> dict:
-    """Size and sparsity of the linear system each method has to factorise.
-
-    This is the structural half of the "memory overhead" comparison asked for in
-    the project proposal: the two NR variants solve systems of the *same*
-    dimension, the rectangular method solves a larger one, and FDLF solves two
-    smaller constant ones.
-    """
     ybus = build_ybus(case, sparse=options.sparse)
 
     if solver_key in ("SNR", "PNR"):
@@ -180,12 +149,6 @@ def benchmark_case(
     per_solver_options: Optional[Dict[str, SolverOptions]] = None,
     per_solver_repeats: Optional[Dict[str, int]] = None,
 ) -> List[BenchmarkRow]:
-    """Benchmark every solver in ``solver_keys`` on one case.
-
-    ``per_solver_repeats`` lets a slow solver be sampled fewer times -- Gauss-Seidel
-    can be three orders of magnitude slower than the Newton methods, and repeating
-    it as often would dominate the whole sweep for no extra precision.
-    """
     base_options = options or SolverOptions()
     per_solver_options = per_solver_options or {}
     per_solver_repeats = per_solver_repeats or {}
@@ -257,16 +220,6 @@ def benchmark_suite(
 
 def component_timings(case: PowerCase, options: Optional[SolverOptions] = None,
                       repeats: int = 200) -> "pandas.DataFrame":
-    """Time one iteration of SNR and PNR broken into its three stages.
-
-    The base paper's claim is specifically about the cost of *rebuilding the
-    Jacobian*, and it assumes "other steps of the two NR methods are exactly the
-    same" (Section 3).  Total solve time therefore tests the claim only
-    indirectly: it also contains the mismatch evaluation and the linear solve,
-    which are genuinely identical work for the two methods and dilute whatever
-    advantage the Jacobian assembly has.  This function measures the three
-    stages separately, at the flat start, so the claim can be tested directly.
-    """
     import pandas as pd
 
     from .solvers import simplified_nr, standard_nr

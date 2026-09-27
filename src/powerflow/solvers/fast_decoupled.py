@@ -1,34 +1,3 @@
-r"""
-Fast Decoupled Load Flow (FDLF) -- Stott & Alsac, 1974.
-
-Project extension.  The proposal asks for the simplified NR method to be
-benchmarked against FDLF as well as against standard NR, so this is the third
-leg of the comparison.
-
-FDLF exploits the weak coupling between ``P`` and ``|V|`` and between ``Q`` and
-``delta`` in high-voltage networks.  The Jacobian is replaced once and for all
-by two *constant*, real, symmetric matrices built from the network susceptances,
-
-.. math::
-
-    B' \,\Delta\delta = \Delta P / |V|, \qquad
-    B''\,\Delta|V|    = \Delta Q / |V|,
-
-which are factorised a single time before the iteration starts.  Per iteration
-it is therefore far cheaper than either NR variant -- there is no Jacobian to
-rebuild at all -- but it converges only linearly, so it usually needs several
-times more iterations.  That trade-off is the interesting part of the
-comparison: the simplified NR method attacks the same cost (Jacobian rebuild)
-without giving up Newton's convergence rate.
-
-Two standard variants are supported, differing in where branch resistances are
-neglected (the naming follows MATPOWER's ``makeB``):
-
-``XB``
-    Resistance dropped from ``B'``  (the usual default).
-``BX``
-    Resistance dropped from ``B''``.
-"""
 from __future__ import annotations
 
 import copy
@@ -47,12 +16,6 @@ SHORT = "FDLF"
 
 
 def make_b_matrices(case: PowerCase, variant: str = "XB", sparse: bool = False) -> Tuple:
-    """Build the constant ``(B', B'')`` matrices, reduced to their index sets.
-
-    ``B'`` ignores line charging, off-nominal taps and (for ``XB``) series
-    resistance; ``B''`` ignores phase shifts and (for ``BX``) series resistance.
-    Bus shunts are dropped from ``B'`` and retained in ``B''``.
-    """
     variant = variant.upper()
     if variant not in ("XB", "BX"):
         raise ValueError(f"unknown FDLF variant {variant!r}")
