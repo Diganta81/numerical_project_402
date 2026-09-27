@@ -1,6 +1,12 @@
-# Simplified Newton–Raphson Power Flow — reproduction and extensions
+# CSE 402 (Numerical Analysis, Simulation and Modeling) project.
 
-CSE 402 (Numerical Analysis, Simulation and Modeling) project.
+## Team
+
+- [Diganta Saha Tirtha](https://github.com/Diganta81)
+- [Anika](https://github.com/Anika-34)
+- [Ahtashamul Haque](https://github.com/ahtasham67)
+- [Nayeem](https://github.com/Nayeemj496)
+- [Aktaruzzaman Mukdho](https://github.com/hm-aktaruzzaman-mukdho)
 
 **Base paper:** T. Kulworawanichpong, *"Simplified Newton–Raphson power-flow
 solution method"*, International Journal of Electrical Power & Energy Systems

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Sequ
 import numpy as np
 import scipy.sparse as sp
 
-if TYPE_CHECKING:            # pandas is imported lazily inside the functions that need it
+if TYPE_CHECKING:           
     import pandas
 
 from .case import PowerCase
