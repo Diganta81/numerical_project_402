@@ -23,7 +23,6 @@ def _fmt(value, precision: int = 4) -> str:
 
 
 def to_markdown(df, precision: int = 4, index: bool = False) -> str:
-    """Render a DataFrame as a GitHub-flavoured Markdown table."""
     frame = df.reset_index() if index else df
     cols = list(frame.columns)
     header = "| " + " | ".join(str(c) for c in cols) + " |"
@@ -37,7 +36,6 @@ def to_markdown(df, precision: int = 4, index: bool = False) -> str:
 def save_table(df, name: str, title: str = "", notes: str = "",
                out_dir: Optional[Path] = None, precision: int = 4,
                index: bool = False) -> Path:
-    """Write ``df`` to ``results/tables/<name>.csv`` and ``.md``."""
     out_dir = Path(out_dir) if out_dir else TABLE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / f"{name}.csv"
@@ -52,7 +50,6 @@ def save_table(df, name: str, title: str = "", notes: str = "",
 
 
 class Section:
-    """Small console helper so each script prints a readable transcript."""
 
     def __init__(self, title: str, stream=sys.stdout):
         self.title = title
@@ -71,7 +68,6 @@ def banner(text: str) -> None:
 
 
 def print_table(df, precision: int = 4, index: bool = False) -> None:
-    """Print a DataFrame using the same formatting as the Markdown output."""
     frame = df.reset_index() if index else df
     cols = [str(c) for c in frame.columns]
     rendered = [[_fmt(row[c], precision) for c in frame.columns] for _, row in frame.iterrows()]
@@ -84,7 +80,6 @@ def print_table(df, precision: int = 4, index: bool = False) -> None:
 
 
 def voltage_table(case, v, precision: int = 4):
-    """Bus-by-bus solution table, the format of the paper's Table 3."""
     import pandas as pd
 
     kind = {1: "PQ", 2: "PV", 3: "slack"}

@@ -5,7 +5,6 @@ from powerflow.solvers import rect_current_nr, simplified_nr, standard_nr
 
 
 def perturbed_states(case, v, eps: float):
-    """Yield ``(index, v_plus, v_minus)`` over the polar unknowns of ``case``."""
     pvpq, pq = case.pvpq, case.pq
     vm, va = np.abs(v), np.angle(v)
     for j, k in enumerate(pvpq):                 # angle unknowns
@@ -21,7 +20,6 @@ def perturbed_states(case, v, eps: float):
 
 
 def numeric_jacobian(case, ybus, v, residual, eps: float = 1e-6) -> np.ndarray:
-    """Central-difference Jacobian ``d(residual)/dx`` over the polar unknowns."""
     n_x = len(case.pvpq) + len(case.pq)
     jac = np.zeros((len(residual(v)), n_x))
     for j, sign, v_pert in perturbed_states(case, v, eps):
@@ -29,7 +27,6 @@ def numeric_jacobian(case, ybus, v, residual, eps: float = 1e-6) -> np.ndarray:
     return jac
 
 
-# --------------------------------------------------------------------------
 def test_standard_reference_matches_vectorized(small_case):
     ybus = build_ybus(small_case)
     v = small_case.flat_start() * np.exp(1j * 0.05)      # move off the flat start
@@ -39,7 +36,6 @@ def test_standard_reference_matches_vectorized(small_case):
 
 
 def test_simplified_reference_matches_vectorized(small_case):
-    """Equations (9)-(16) verbatim versus the compact complex form."""
     ybus = build_ybus(small_case)
     v = small_case.flat_start() * np.exp(1j * 0.05)
     s_eff = simplified_nr.effective_schedule(small_case, ybus, v)
@@ -49,7 +45,6 @@ def test_simplified_reference_matches_vectorized(small_case):
 
 
 def test_standard_jacobian_matches_finite_differences(small_case):
-    """J = d(P_cal, Q_cal)/dx, the sign convention of paper equation (18)."""
     case, ybus = small_case, build_ybus(small_case)
     v = case.flat_start() * np.exp(1j * 0.03)
 
@@ -64,12 +59,8 @@ def test_standard_jacobian_matches_finite_differences(small_case):
 
 
 def test_simplified_jacobian_matches_finite_differences(small_case):
-    """The paper's J is -dF/dx, with F the current mismatch of equation (2)."""
     case, ybus = small_case, build_ybus(small_case)
     v = case.flat_start() * np.exp(1j * 0.03)
-    # Hold the PV reactive powers fixed: the lagged update is not part of the
-    # derivative the paper writes down, and differentiating through it would
-    # test a different matrix.
     s_eff = simplified_nr.effective_schedule(case, ybus, v)
 
     def residual(v_now):
@@ -94,7 +85,6 @@ def test_sparse_matches_dense(small_case):
 
 
 def test_rectangular_jacobian_matches_finite_differences(small_case):
-    """The rectangular formulation uses the ordinary convention J = dR/dx."""
     case, ybus = small_case, build_ybus(small_case)
     v = case.flat_start() * np.exp(1j * 0.03)
     q = case.q_sch.copy()

@@ -1,4 +1,3 @@
-"""Put ``src/`` on the import path so the scripts run from a clean checkout."""
 from __future__ import annotations
 
 import sys
