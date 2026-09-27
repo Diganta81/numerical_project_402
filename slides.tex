@@ -1,161 +1,272 @@
-\documentclass[10pt,aspectratio=169]{beamer}
+\documentclass[aspectratio=169,10pt]{beamer}
+
 \usetheme{Madrid}
 \usecolortheme{default}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
 
+\usepackage[utf8]{inputenc}
 \usepackage{booktabs}
 \usepackage{amsmath}
+\usepackage{graphicx}
 
-\title[Simplified NR Power Flow]{Simplified Newton--Raphson Power-Flow Implementation}
-\subtitle{Kulworawanichpong (2010) --- reproduction, audit, and extensions}
-\author{Anika Morshed \and Diganta Saha Tirtha \and Jahedul Islam Nayeem}
+\title[Simplified NR Power Flow]{Simplified Newton--Raphson Power-Flow Solution Method}
+\subtitle{Reproduction and Extensions of Kulworawanichpong (2010)}
+\author{Anika Morshed \and Diganta Saha Tirtha \and H.M. Aktaruzzaman \and Ahtasham Haque \and Jahedul Islam}
 \institute{CSE402: Numerical Analysis, Simulation and Modeling Sessional}
 \date{\today}
 
 \begin{document}
 
-\frame{\titlepage}
-
 % ------------------------------------------------------------------
-\begin{frame}{What's in the repository}
-\textbf{Library} (\texttt{src/powerflow/}, $\sim$4000 lines): a shared \texttt{PowerCase}
-model and $Y_{bus}$ builder feed \textbf{seven solvers} behind one
-\texttt{solve(case, options, ybus)} interface:
-\begin{itemize}
-  \item \textbf{SNR} --- standard Newton--Raphson, power mismatch (baseline)
-  \item \textbf{PNR} --- simplified NR, current mismatch (\emph{the base paper})
-  \item \textbf{PNR+} --- PNR with PV reactive power as a genuine Newton unknown
-  \item \textbf{RCI} --- rectangular current injection (project proposal's formulation)
-  \item \textbf{FDLF} --- fast decoupled load flow, XB and BX variants
-  \item \textbf{GS} --- Gauss--Seidel, classical baseline
-\end{itemize}
-\textbf{Driven by} \texttt{run\_all.py} over \textbf{9 test systems} (3 to 300 buses,
-IEEE 5/6/14/24/30/57/118/300-bus + the paper's 3-bus example) $\to$
-\texttt{results/tables/} (CSV) and \texttt{results/figures/} (30 PNGs).
-\textbf{Verified by} \texttt{pytest}: \textbf{251 tests}, all passing --
-cross-checks every solver against a $10^{-12}$ p.u.\ NR reference on every case.
+\begin{frame}
+  \titlepage
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{The two formulations}
-Both drive the \emph{same} $(n-1)+n_{pq}$ unknowns $(\delta, |V|)$ to zero;
-they differ only in the residual.
-
-\textbf{Standard NR} --- power mismatch (paper eq.\ 21--22):
-\[
-P_{cal,k} = \sum_i |V_k V_i Y_{ki}|\cos(\theta_{ki}+\delta_i-\delta_k), \quad
-\Delta P_k = P_{sch,k}-P_{cal,k}
-\]
-Every Jacobian entry carries \emph{both} $|V_k|$ and $|V_i|$; diagonals are
-row sums over the whole network.
-
-\textbf{Simplified NR (PNR)} --- nodal current mismatch (paper eq.\ 2, 4--5):
-\[
-F_k = \overline{\left(\tfrac{S_{sch,k}}{V_k}\right)} - \sum_i Y_{ki}V_i = 0
-\quad\Longleftrightarrow\quad \Delta S_k = 0 \ (\text{exact, not approximate})
-\]
-The summand drops the $|V_k|$ factor and the $-\delta_k$ angle term $\to$
-cheaper off-diagonals, but the diagonal becomes a closed-form expression
-instead of a free row-sum.
+\begin{frame}{What's in the Repository}
+  \small
+  \textbf{Library} (\texttt{src/powerflow/}, $\sim$4000 lines): one shared
+  \texttt{PowerCase} model and $Y_{bus}$ builder feed \textbf{seven solvers}
+  behind a single \texttt{solve(case, options, ybus)} interface:
+  \begin{itemize}
+    \item \textbf{SNR} --- standard Newton--Raphson, power mismatch (baseline)
+    \item \textbf{PNR} --- simplified NR, current mismatch (\emph{the base paper})
+    \item \textbf{PNR+} --- our extension: PV reactive power as a genuine Newton unknown
+    \item \textbf{RCI} --- rectangular current injection (project proposal's formulation)
+    \item \textbf{FDLF} --- fast decoupled load flow, XB and BX variants
+    \item \textbf{GS} --- Gauss--Seidel, classical baseline
+  \end{itemize}
+  \textbf{Driven by} \texttt{run\_all.py} over \textbf{9 test systems}
+  (paper's 3-bus example, IEEE 5/6/24/30/57/118/300-bus) $\to$
+  \texttt{results/tables/} (CSV) and \texttt{results/figures/} (30 PNGs).
+  \textbf{Verified by} \texttt{pytest}: \textbf{251 tests, all passing} ---
+  every solver checked against a $10^{-12}$ p.u.\ NR reference on every case.
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{Reproducing the paper (Section 4 and Table 2)}
-\textbf{3-bus worked example}: $Y_{bus}$, all 3 Newton iterations, and the
-converged solution reproduce the paper to its own 4-decimal rounding
-(max abs.\ error $\sim 5\times10^{-5}$ in $Y_{bus}$ magnitude).
+\begin{frame}{Problem Statement}
+  \small
+  \textbf{Power flow:} given a network of $n$ nodes (buses) and known power
+  injections, find the unknown voltage at every node.
 
-\textbf{Section 3's central claim, audited.} The paper reports Jacobian cost
-as $O(n)$ for PNR vs.\ $O(n^2)$ for SNR (its Table 1). We recount every
-formula element-by-element with identical common-subexpression reuse for
-both methods:
+  \medskip
+  \begin{itemize}
+    \item This is an $n$-dimensional \textbf{root-finding problem}: $n$
+      nonlinear equations in $n$ unknown complex voltages.
+    \item Solved by \textbf{Newton--Raphson}: build a Jacobian, solve
+      $J\,\Delta x = -f(x)$, update, repeat.
+    \item \textbf{Bottleneck:} rebuilding $J$ every iteration costs
+      $O(n^2)$ for a dense network.
+  \end{itemize}
 
-\begin{table}
-\centering\small
-\begin{tabular}{lccc}
-\toprule
-Method & per off-diag.\ pair & per bus (diagonal) & per mismatch term \\
-\midrule
-SNR & 9 & 4  & 4 \\
-PNR & 5 & 13 & 3 \\
-\bottomrule
-\end{tabular}
-\end{table}
-A dense Jacobian has $O(n^2)$ entries -- a linear PNR cost is impossible.
-The paper's Table 1 counts off-diagonal work once per \emph{row}, not per
-\emph{entry}. Both methods are actually $O(n^2)$; the true asymptotic ratio
-is a \textbf{constant} $9/5=1.80$, not the published $53.6\times$ at $n=118$.
+  \medskip
+  \textbf{Base paper's claim:} rewrite the equations in an equivalent form
+  whose Jacobian is cheaper to build --- same root, same convergence,
+  less work per iteration.
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{Cost over the real (sparse) $Y_{bus}$}
-Dense is not what any real solver stores. Over the true sparsity pattern
-(\texttt{results/tables/02\_sparse\_flops.csv}):
+\begin{frame}{The Two Formulations}
+  \small
+  \textbf{Standard NR} --- power mismatch equations:
+  \[
+    \Delta P_k,\ \Delta Q_k \;=\; \text{function of }
+    |V_k|\,|V_i|\,|Y_{ki}|\,\cos/\sin(\theta_{ki}+\delta_i-\delta_k)
+  \]
 
-\begin{table}
-\centering\small
-\begin{tabular}{lrrrr}
-\toprule
-Case & $n$ & avg.\ degree $d$ & Sparse SNR & Sparse PNR : SNR ratio\\
-\midrule
-case5\_stagg   & 5   & 2.80 & 218    & 1.22 \\
-case57\_ieee   & 57  & 2.74 & 2\,480  & 1.16 \\
-case118\_ieee  & 118 & 3.03 & 5\,594  & 1.18 \\
-case300\_ieee  & 300 & 2.73 & 13\,030 & 1.15 \\
-\bottomrule
-\end{tabular}
-\end{table}
-Predicted ratio $r(d)=(9d+4)/(5d+13)$: break-even at $d=2.25$; transmission
-grids sit at $d\approx2.7$--$3.7$ -- just above break-even. \textbf{The
-per-iteration saving is real but modest ($\sim15$--$18\%$), not the
-order-of-magnitude the paper's own table implies.}
+  \textbf{Simplified NR (the paper)} --- current mismatch equations:
+  \[
+    G_k,\ H_k \;=\; \text{function of }
+    |V_i|\,|Y_{ki}|\,\cos/\sin(\theta_{ki}+\delta_i)
+  \]
+
+  \medskip
+  \textbf{Same root} (multiplying a nonlinear equation by a nonzero factor
+  doesn't move its zero), but the current-mismatch summand:
+  \begin{itemize}
+    \item drops the $|V_k|$ factor,
+    \item drops $-\delta_k$ from the angle,
+  \end{itemize}
+  so each Jacobian entry needs \emph{fewer multiplications}.
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{Iterations, timing, and where PNR actually loses}
-From \texttt{results/tables/05\_method\_comparison.csv} (flat start,
-$10^{-10}$ p.u.\ tolerance):
-
-\begin{table}
-\centering\small
-\begin{tabular}{lrrrrrrr}
-\toprule
-Case ($n$) & SNR & PNR & PNR+ & RCI & FDLF-XB & GS \\
-\midrule
-5   & 4 & 4  & 4 & 3 & 6  & 27 \\
-30  & 4 & 5  & 4 & 4 & 8  & 100 \\
-57  & 5 & 6  & 4 & 4 & 7  & 117 \\
-118 & 4 & 12 & 5 & 6 & 8  & 378 \\
-300 & 5 & 13 & 6 & 6 & 11 & 3000 (diverged) \\
-\bottomrule
-\end{tabular}
-\end{table}
-PNR needs \textbf{3$\times$ more iterations} than SNR at 300 buses (lagging
-PV reactive power breaks quadratic convergence); \textbf{PNR+} (Q as a real
-Newton unknown) restores parity within 1--2 iterations everywhere. A
-$\sim$15\% per-iteration saving cannot offset a 3$\times$ iteration penalty
-on total solve time.
+\begin{frame}{Reproducing the Paper --- Exact Match}
+  \small
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{3-bus worked example (Sec.\ 4):}
+      \begin{itemize}
+        \item $Y_{bus}$ matches all 6 printed entries to 4 decimals
+        \item Jacobian matches at \emph{all 3} iterations, every entry
+        \item Table 2: $V_2 = 0.97168\angle{-2.696^\circ}$,
+              $Q_3 = 1.4618$ p.u.\ --- matches
+      \end{itemize}
+      \vspace{6pt}
+      \textbf{5 benchmark systems (Table 5):}
+      \begin{itemize}
+        \item TC1--TC5 (5 to 57 buses) re-solved
+        \item Both methods agree with a standard-NR reference to
+              $<10^{-7}$ p.u.
+        \item PNR matches the paper's iteration count on 3 of 5 cases
+              (TC1, TC2, TC4); the rest reflect our tighter $10^{-10}$
+              tolerance vs.\ the paper's hand-worked values
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \includegraphics[width=\linewidth]{results/figures/01_fig4_convergence.png}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % ------------------------------------------------------------------
-\begin{frame}{Robustness and bottom line}
-\textbf{Loadability sweep} (\texttt{07\_max\_loading.csv}, case118\_ieee):
-max load factor reached from a flat start before divergence --
-SNR/RCI/FDLF-XB $\to 3.0\times$, \textbf{PNR $\to$ only $1.6\times$},
-PNR+ $\to 2.0\times$. The lagged-Q approximation costs stability, not just
-speed, near the voltage-stability boundary.
+\begin{frame}{Finding 1: The Complexity Claim Is Wrong}
+  \small
+  \textbf{Paper claims:} Jacobian cost drops from $O(n^2)$ to $O(n)$.
 
-\textbf{Memory}: peak allocation tracks linear-system size $(n-1)+n_{pq}$,
-not the algebraic form of the Jacobian -- SNR and PNR are memory-identical
-at fixed $n$ (e.g.\ 1.74--1.76~MB at 118 buses). The simplification is a
-\emph{time} optimization only.
+  \medskip
+  \textbf{Why that can't be right:} a dense Jacobian has $O(n^2)$ \emph{distinct}
+  entries --- filling $n^2$ distinct numbers needs at least $O(n^2)$ work,
+  not $O(n)$. The paper's own Table 1 counts off-diagonal work once per
+  \emph{row}, not per \emph{entry}.
 
-\vspace{0.5em}
-\textbf{Bottom line:} the paper's core idea is real -- the paper's own
-Table 1 is not. The audited model matches the paper's own \emph{measured}
-57-bus ratio (1.728 vs.\ predicted 1.733) while overturning its published
-formula. On real sparse grids the win shrinks to $\sim$15--18\% per
-iteration, and PNR's PV handling costs it both iterations and robustness --
-fully recovered by the PNR+ extension implemented here.
+  \medskip
+  \textbf{Recounting by hand, entry by entry} (same reuse of common
+  subexpressions for both methods):
+  \begin{center}
+  \begin{tabular}{lccc}
+    \toprule
+    Method & per off-diag.\ pair & per bus (diagonal) & per mismatch term \\
+    \midrule
+    SNR & 9 & 4  & 4 \\
+    PNR & 5 & 13 & 3 \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+  Both methods are $O(n^2)$; the dense asymptotic ratio is a
+  \textbf{constant} $9/5=1.80$. At the paper's own 57-bus case, this dense
+  model predicts a speedup of \textbf{1.733$\times$} --- the paper's own
+  \emph{measured} speedup there is \textbf{1.728$\times$}. The conclusion
+  survives; the stated growth rate does not.
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{Finding 1b: Real Networks Are Sparse}
+  \small
+  The dense model above assumes every bus connects to every other bus.
+  Real transmission grids don't: each bus has only $d\approx3$ neighbours
+  on average, so the predicted ratio becomes
+  $r(d) = \dfrac{9d+4}{5d+13}$ ---
+  crossing 1 at $d=2.25$, reaching the dense asymptote $1.80$ only as
+  $d\to\infty$.
+
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \begin{center}
+      \begin{tabular}{lrrr}
+        \toprule
+        Case & $n$ & avg.\ $d$ & Sparse ratio \\
+        \midrule
+        case57\_ieee  & 57  & 2.74 & 1.16 \\
+        case118\_ieee & 118 & 3.03 & 1.18 \\
+        case300\_ieee & 300 & 2.73 & 1.15 \\
+        \bottomrule
+      \end{tabular}
+      \end{center}
+      \vspace{4pt}
+      \textbf{Real per-iteration saving: only $\sim$15--18\%}, not the
+      order-of-magnitude the paper's Table 1 implies.
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \includegraphics[width=\linewidth]{results/figures/02_ratio_vs_degree.png}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{Finding 2: Scale Testing Reveals a Hidden Cost}
+  \small
+  The paper only tested up to 57 buses. We tested up to \textbf{300 buses}.
+
+  \begin{center}
+  \begin{tabular}{lccc}
+    \toprule
+    Buses & SNR (standard) & PNR (paper) & PNR+ (our fix) \\
+    \midrule
+    5   & 4  & 4  & 4 \\
+    118 & 4  & \textbf{12} & 5 \\
+    300 & 5  & \textbf{13} & 6 \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \textbf{Cause:} the paper \emph{approximates} one unknown at PV buses
+  (reactive power $Q$) using last iteration's value, instead of solving for
+  it. This breaks quadratic convergence at those buses --- and larger grids
+  have more PV buses.
+
+  \medskip
+  \textbf{Our fix (PNR+):} treat $Q$ as a real Newton unknown $\Rightarrow$
+  quadratic convergence restored, iteration count stays close to standard NR.
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{Extensions: Method Comparison, Memory, Robustness}
+  \small
+  \textbf{vs.\ Fast Decoupled (FDLF) and Gauss--Seidel} (300-bus system,
+  \texttt{05\_method\_comparison.csv}):
+  \begin{center}
+  \begin{tabular}{lccc}
+    \toprule
+    Method & Iterations & Min.\ solve time & Convergence \\
+    \midrule
+    SNR      & 5    & 13.6~ms   & quadratic \\
+    PNR      & 13   & 32.8~ms   & linear (PV buses) \\
+    FDLF-XB  & 11   & 2.9~ms    & linear (cheapest/iter) \\
+    Gauss--Seidel & 3000 (did not converge) & 3.1~s & linear, too slow \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \begin{itemize}
+    \item \textbf{Memory:} SNR and PNR need essentially the \emph{same}
+      peak memory at fixed $n$ (e.g.\ 1.74 vs.\ 1.76~MB at 118 buses) ---
+      the speedup is a \emph{time} optimization, not a space one.
+    \item \textbf{Robustness:} on the 118-bus system, PNR loses convergence
+      earlier under stress --- \textbf{1.6$\times$} nominal load vs.\
+      SNR/RCI's \textbf{3.0$\times$} --- largely recovered by PNR+
+      (\textbf{2.0$\times$}).
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{Conclusion}
+  \small
+  \begin{itemize}
+    \item The paper's \textbf{core idea is correct}: reformulating power
+      mismatch as current mismatch gives a genuinely cheaper Jacobian.
+    \item Its \textbf{complexity claim is not}: it's $O(n^2)$ with a smaller
+      constant, not $O(n)$ --- confirmed by re-deriving the operation count,
+      and validated against the paper's own measured 57-bus speedup.
+    \item On \textbf{real sparse grids} the saving is $\sim$15--18\% per
+      iteration, not an order of magnitude.
+    \item Its \textbf{PV-bus approximation costs more than it looks}: extra
+      iterations that grow with network size, and lost robustness under
+      stress --- both fixed by our extension (PNR+).
+    \item Everything is reproducible: \texttt{python run\_all.py}
+      regenerates every table/figure; \texttt{pytest} runs 251 verification
+      tests (finite-difference checks, paper's own printed numbers, etc.).
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}
+  \centering
+  \Huge Thank You
+  \bigskip
+
+  \Large Questions?
 \end{frame}
 
 \end{document}
