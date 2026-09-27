@@ -2,11 +2,11 @@
 
 ## Team
 
-- [Diganta Saha Tirtha](https://github.com/Diganta81)
-- [Anika](https://github.com/Anika-34)
-- [Ahtashamul Haque](https://github.com/ahtasham67)
-- [Nayeem](https://github.com/Nayeemj496)
-- [Aktaruzzaman Mukdho](https://github.com/hm-aktaruzzaman-mukdho)
+- [H. M. Aktaruzzaman Mukdho - 2105064](https://github.com/hm-aktaruzzaman-mukdho)
+- [Ahtashamul Haque - 2105067](https://github.com/ahtasham67)
+- [Anika Morshed - 2105068](https://github.com/Anika-34)
+- [Diganta Saha Tirtha - 2105081](https://github.com/Diganta81)
+- [Jahedul Islam Nayeem - 2105082](https://github.com/Nayeemj496)
 
 **Base paper:** T. Kulworawanichpong, *"Simplified Newton–Raphson power-flow
 solution method"*, International Journal of Electrical Power & Energy Systems
