@@ -17,3 +17,7 @@ __pycache__/
 results/tables/*.md
 *.png
 *.csv
+*.nav
+*.toc
+*.snm
+*.vrb
