@@ -28,15 +28,19 @@ memory.
 ```bash
 pip install -r requirements.txt
 
-python run_all.py            # regenerate every table and figure (~90 s)
-python -m pytest             # 251 tests, ~2 s
+python run_all.py            # regenerate every table and figure
+python -m pytest             # 285 tests, ~3 s
 
 python run_all.py --list     # show the individual steps
 python run_all.py 01         # just the 3-bus worked example
 ```
 
 Results land in `results/figures/` (PNG + PDF) and `results/tables/`
-(CSV + Markdown). Every figure has a companion table with the same name.
+(CSV + Markdown); step 08 writes to `results/extension_chord/`. Every figure has
+a companion table with the same name.
+
+Step 08 runs in its own interpreter, because it pins BLAS/LAPACK to one thread
+and those environment variables are only read when NumPy is first imported.
 
 ---
 
@@ -59,6 +63,7 @@ src/powerflow/            the library — no scripts, no I/O side effects
     rect_current_nr.py    RCI   — rectangular current injection
     fast_decoupled.py     FDLF  — Stott & Alsac, XB and BX
     gauss_seidel.py       GS    — classical baseline
+    chord_nr.py           chord — frozen-Jacobian variants of SNR and PNR
 
 scripts/                  one script per result, runnable standalone
   01_worked_example_3bus.py    paper Section 4, entry by entry
@@ -68,11 +73,13 @@ scripts/                  one script per result, runnable standalone
   05_ext_method_comparison.py  extension 2: FDLF and Gauss–Seidel
   06_ext_memory.py             extension 3: memory overhead
   07_ext_robustness.py         extension 4: robustness under load
+  08_ext_chord_method.py       extension 5: chord (frozen-Jacobian) iterations
 
 data/                     IEEE test systems as MATPOWER-format JSON (see data/README.md)
 tests/                    pytest suite, including the paper's printed numbers
 docs/METHOD.md            the two formulations derived side by side
 results/                  generated figures and tables
+  extension_chord/        step 08 writes here (own figures/ and tables/)
 ```
 
 **Where to start reading.** `docs/METHOD.md` for the mathematics;
@@ -100,6 +107,10 @@ print(result.summary(), result.vm.min(), result.va_deg.max())
 | `RCI` | Rectangular current injection — the proposal's slide-4 formulation |
 | `FDLF-XB`, `FDLF-BX` | Fast decoupled load flow |
 | `GS` | Gauss–Seidel |
+
+The chord variants live outside that registry, in
+`powerflow.solvers.chord_nr`, because they take an extra `refresh_every`
+argument: `chord_nr.solve_snr(case)` and `chord_nr.solve_pnr(case)`.
 
 ---
 
@@ -146,10 +157,23 @@ Recounting properly, with the same common-subexpression reuse granted to both:
 | Standard NR | 9 multiplications | 4 |
 | Simplified NR | 5 multiplications | 13 |
 
-So the ratio is `(9d + 4) / (5d + 13)` for average nodal degree `d`: it
-approaches **9/5 = 1.80** for a dense Jacobian, and equals **1.73 at 57 buses**
-— against the **1.728** the paper actually measured on its largest case. *The
-paper's conclusion survives in full even though its Table 1 does not.*
+The paper's own text makes the slip visible. It states that there are
+`(n − 1) × (n − 2)` off-diagonal elements in `J1`, charges the standard method
+`3 × (n − 1) × (n − 2)` for them — and then charges the proposed method
+`2 × (n − 2)`, one row's worth, for the same population.
+
+Apply the paper's own per-element costs to the correct element count and the
+Jacobian ratio is `10/6 = 1.67`. Grant both methods the shared-subexpression
+reuse above and it is `(9d + 4) / (5d + 13)` for average nodal degree `d`,
+approaching **9/5 = 1.80** for a dense Jacobian. Either way the result is a
+**constant factor**, and both methods stay `O(n²)`.
+
+That is the size of effect the paper actually measured: its Table 5 reports
+total-time ratios of **1.13–1.73**, where its own Table 1 would have predicted
+**25.9×** at 57 buses. *The paper's conclusion survives in full even though its
+Table 1 does not.* (Its 1.73 is a total solve time ratio that also includes a
+4-vs-3 iteration advantage, so it is not directly a per-iteration Jacobian
+figure — only the order of magnitude is comparable.)
 
 The recount also exposes a limit the paper never mentions: the simplified method
 is cheaper per matrix *entry* but dearer per *bus*, because its closed-form
@@ -162,8 +186,9 @@ left. See `results/figures/02_ratio_vs_degree.png`.
 
 The paper says its test systems were "modified" but never says how, and the
 solutions in its Table 3 are not those of the standard IEEE cases (several of
-its 24-bus voltages sit near `0.46 − j0.91` p.u., which no healthy network
-produces). The unmodified library cases are used here, so **Table 3 is not
+its 24-bus voltages sit near `0.46 − j0.91` p.u. — a normal magnitude, but an
+angle of −63° from the slack bus, a spread no normally-operating transmission
+network shows). The unmodified library cases are used here, so **Table 3 is not
 reproducible number for number**. Iteration counts, convergence shapes and
 timing ratios are, and they are what the paper's claims rest on.
 
@@ -172,19 +197,21 @@ simplified method is *not* faster overall, because it needs more iterations. But
 decomposing one iteration into its four stages shows the paper's actual claim
 holding exactly where it is made:
 
-| stage | differs between methods? | share of an iteration |
+| stage | differs between methods? | share of an iteration (TC1–TC5) |
 | --- | --- | --- |
-| mismatch evaluation | yes | ~18 % |
-| **Jacobian derivative evaluation** | **yes — ≈1.5× faster for PNR** | ~27 % |
-| block assembly | no — identical work | ~38 % |
-| linear solve | no — identical work | ~17 % |
+| mismatch evaluation | yes | 7–23 % |
+| **Jacobian derivative evaluation** | **yes — 1.21–1.31× faster for PNR** | 18–26 % |
+| block assembly | no — identical work | 32–42 % |
+| linear solve | no — identical work | 9–42 % |
 
 Section 3 of the paper assumes "the Jacobian updating step dominates the overall
-execution time". It does not: **56 % of an iteration** is spent on work that is
-identical for both methods and cannot be improved by reformulating the mismatch.
-The derivative speed-up itself runs from about 1.0× on the 6-bus case to 2.0× on
-the 57-bus case, in line with the audited FLOP model. See
-`results/tables/03_stage_timings.md`.
+execution time". It does not: **51–74 % of an iteration** (mean 58 %) is spent on
+work that is identical for both methods and cannot be improved by reformulating
+the mismatch, and that share *rises* with system size. The derivative speed-up
+itself is 1.21–1.31× on TC1–TC4 and 1.51–1.60× at 118 and 300 buses; the 57-bus
+point measures 0.97× and is an outlier, bracketed by 1.29× at 30 buses and 1.51×
+at 118. See `results/tables/03_stage_timings.md` and
+`results/tables/04_derivative_ratio.md`.
 
 ---
 
@@ -220,8 +247,8 @@ PV bus, and iteration counts return to within one of standard NR on every system
 tested. This is the project's own contribution.
 
 Meanwhile, the Jacobian advantage the paper predicted *does* grow with size —
-from about 1.2× at 5 buses to 3.6× at 118 — it is simply outweighed by the
-iteration count.
+from 1.13× at 3 buses to 1.51× at 118 and 1.60× at 300 — it is simply outweighed
+by the iteration count.
 
 ### Extension 2 — FDLF and Gauss–Seidel (`05_ext_method_comparison.py`)
 
@@ -239,20 +266,23 @@ of an iteration somewhere different, and pays somewhere different:
 | FDLF | Jacobian → two constant matrices, factorised once | linear convergence |
 | GS | no Jacobian at all | linear, and the rate degrades with `n` |
 
-**FDLF wins the wall clock outright** — on the 300-bus system it solves in 18 ms
-against 57 ms for standard NR and 144 ms for the paper's method, despite needing
-11 iterations to standard NR's 5, because it never rebuilds or refactors
-anything. That is the honest context for the paper: eliminating the Jacobian
-rebuild entirely beats making it cheaper, *if* you can afford linear
-convergence. Gauss–Seidel fails to converge at all on the 300-bus system within
-3000 sweeps, having needed 378 on the 118-bus one.
+**FDLF wins the wall clock on the 118-bus system** — FDLF-BX solves it in 2.35 ms
+against 2.72 ms for standard NR and 8.42 ms for the paper's method, despite
+needing 6 iterations, because it never rebuilds or refactors anything. At 300
+buses the ordering flips back: standard NR is fastest at 22.4 ms, against 31.7 ms
+for `PNR+`, 33.1 ms for `RCI`, 42.2 ms for FDLF-XB and 55.6 ms for the paper's
+method, because FDLF's extra iterations eventually outweigh its cheaper ones.
+That is the honest context for the paper: eliminating the Jacobian rebuild beats
+making it cheaper over a wide range, *if* you can afford linear convergence.
+Gauss–Seidel fails to converge at all on the 300-bus system within 3000 sweeps,
+having needed 378 on the 118-bus one.
 
 ### Extension 3 — memory overhead (`06_ext_memory.py`)
 
 The answer here is a **null result, and a clean one: the two NR methods have the
 same memory footprint.** Structurally they solve linear systems of *identical*
 dimension — the reformulation changes the Jacobian's contents, not its size — and
-measured peak heap agrees to within 3.1 % on every system from 24 buses up.
+measured peak heap agrees to within 3.2 % on every system from 24 buses up.
 Reformulating the mismatch is a time optimisation; it buys nothing in space.
 
 The real memory differences are elsewhere. FDLF uses a quarter to a half as much
@@ -264,9 +294,11 @@ limits how far a dense solver scales.
 ### Extension 4 — robustness under load (`07_ext_robustness.py`)
 
 Every injection is scaled by a loading factor up to 5× and each method re-solved
-from a flat start. This separates two kinds of failure. On the 30- and 57-bus
-systems **every** method fails at exactly the same loading — that is the
-network's own voltage-stability limit, and no formulation can be blamed for it.
+from a flat start. This separates two kinds of failure. On the 30-bus system
+**no** method fails anywhere in the sweep, so every one is censored at 5×. On the
+57-bus system **every** method fails at exactly the same loading (2.0×) — a
+common ceiling reached simultaneously is the network's own voltage-stability
+limit, and no formulation can be blamed for it.
 
 On the 118-bus system, the one with 53 PV buses, they part company sharply:
 
@@ -284,11 +316,49 @@ Making the PV reactive powers Newton unknowns fixes the convergence *rate*
 completely and the convergence *basin* only partly. A cheap Jacobian and a fast
 local rate do not by themselves buy robustness.
 
+### Extension 5 — chord iterations (`08_ext_chord_method.py`)
+
+Extension 1–4 all point the same way: most of an iteration is work the paper's
+reformulation cannot touch. So instead of making the Jacobian *cheaper to build*,
+don't rebuild it at all. The chord variants build and LU-factorise once at the
+flat start and reuse the factors by substitution thereafter.
+
+Timing each stage separately shows why this matters, and it reframes the whole
+study — **the cost profile inverts with system size**:
+
+| | 5-bus | 300-bus |
+| --- | --- | --- |
+| Jacobian build — *what the paper optimises* | 64 % | **30 %** |
+| LU factorisation — *what the paper ignores* | 6 % | **67 %** |
+| a chord iteration is cheaper by | 3.3× | **33.6×** |
+
+The paper optimises precisely the stage whose share *shrinks* as systems grow.
+Making the build 1.6× cheaper removes about 11 % of an iteration at 300 buses;
+skipping the build and the factorisation together removes 97 % of one.
+
+**`SNR-chord` is the fastest solver measured anywhere in this project**: 9.79 ms
+on the 300-bus system against 27.93 ms for standard NR, a **2.85×** speed-up,
+using a *single* LU factorisation instead of the 5–13 the Newton methods perform.
+It needs 16 iterations to standard NR's 5 — but each is 33.6× cheaper. The gain
+rises monotonically with size from 30 buses up (1.40×, 1.56×, 1.79×, 2.85×),
+which is the opposite of the trend for the paper's reformulation.
+
+And the strategy works on the **standard** formulation, not on the paper's.
+`PNR-chord` fails outright at 300 buses, and on the PV-dense 24-bus case its
+linear rate degrades to 0.785, needing **57** iterations and running 3.3×
+*slower* than ordinary PNR. Freezing the Jacobian is already a linear iteration;
+the lagged-PV treatment is a second one layered on top, and the two contraction
+factors compound — measured rates are 0.24–0.40 for `SNR-chord` on the large
+systems against 0.57–0.79 for `PNR-chord`.
+
+Because step 08 pins BLAS to a single thread, its absolute times are not
+comparable with extensions 1–4; the ratios within it are.
+
 ---
 
 ## Verification
 
-`python -m pytest` — 251 tests, about 2 seconds.
+`python -m pytest` — 285 tests, about 3 seconds.
 
 The Jacobians are the part most likely to be silently wrong, so they are checked
 three ways:
@@ -332,10 +402,20 @@ that turns out to have no off-nominal taps.
 
 The base paper's mechanism is real and reproduces exactly: the current-mismatch
 formulation gives genuinely cheaper Jacobian entries, and the measured speed-up
-of that step matches an honest FLOP recount of its own equations. Three things
-qualify it, none of which the paper was positioned to see at its 57-bus ceiling:
-the Jacobian rebuild is only about a third of an iteration, so the end-to-end
-gain is small; the cost model in Table 1 is off by a factor of `n`; and the PV
-bus treatment costs iteration count that grows with the number of PV buses,
-which on large systems is worth more than the cheaper Jacobian. The last of
-these has a clean fix, implemented here as `PNR+`.
+of that step is the size an honest FLOP recount of its own equations predicts.
+Four things qualify it, none of which the paper was positioned to see at its
+57-bus ceiling:
+
+1. The cost model in Table 1 is off by a factor of `n` — it charges the proposed
+   method for one row of off-diagonals where it charges the standard method for
+   all `(n − 1) × (n − 2)` of them. Corrected, the saving is a constant factor of
+   1.67–1.80, not `n/2`.
+2. The Jacobian rebuild is only a quarter of an iteration, so the end-to-end gain
+   is lost in the noise — and its share falls to 30 % by 300 buses while the
+   factorisation it leaves alone rises to 67 %.
+3. The PV bus treatment costs iteration count that grows with the number of PV
+   buses, which on large systems is worth more than the cheaper Jacobian, and it
+   costs convergence basin too. This has a clean fix, implemented here as `PNR+`.
+4. Carried to its conclusion — freeze the Jacobian and reuse its factors — the
+   paper's own premise yields 2.85× at 300 buses rather than 1.0×, but only on
+   the standard formulation it set out to improve upon.

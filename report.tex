@@ -14,7 +14,7 @@
        Complexity Audit and Comparative Evaluation}
 \subtitle{CSE 402 Course Project --- Group 12, Section B1}
 \titlenote{Source code, test systems and the complete result set are available
-at \url{https://github.com/hm-aktaruzzaman-mukdho/numerical_project_402}.}
+at \url{https://github.com/Diganta81/numerical_project_402}.}
 
 \author{H M Aktaruzzaman Mukdho}
 \affiliation{
@@ -68,9 +68,10 @@ converged solution to every printed digit. Second, the paper's complexity
 analysis is wrong in an identifiable way --- its Table~1 counts off-diagonal
 work once per matrix \emph{row} rather than once per \emph{entry}, which makes
 the cost appear linear in the bus count. An element-by-element recount shows
-both methods are quadratic, separated by a constant factor approaching $9/5$; it
-predicts $1.733$ at 57 buses against the $1.728$ the paper measured, so the
-conclusion survives even though the arithmetic does not. Third, end-to-end the
+both methods are quadratic, separated by a constant factor of $1.67$--$1.80$
+rather than by a factor of $n$ --- the size of effect the paper's own
+measurements show, where its Table~1 would have predicted $25.9\times$ at 57
+buses. Its conclusion survives even though its arithmetic does not. Third, end-to-end the
 method is \emph{slower}: lagging PV-bus reactive power destroys quadratic
 convergence and inflates the iteration count from 4 to 13 at 300 buses, and an
 augmented variant making reactive power a Newton unknown restores it. Finally,
@@ -143,7 +144,7 @@ a single bus index, and the diagonal entries become closed-form expressions
 instead of row sums.
 
 The paper quantifies the saving in its Section~3 and claims that the Jacobian
-cost per iteration falls from $10n^2 + O(n)$ multiplications to $22(n-2)$ ---
+cost per iteration falls from $10n^2 + O(n)$ multiplications to $22(n-2)$ -
 that is, from quadratic to \emph{linear} in the number of buses $n$. It supports
 this with a symbolic operation count (its Table~1) and two log--log plots (its
 Figures~1 and~2), and validates it experimentally on five test systems of 5 to
@@ -162,10 +163,11 @@ this report contributes:
       paper's 3-bus worked example entry for entry
       (Section~\ref{sec:res-worked}).
 \item An independent audit of the paper's complexity analysis, which locates a
-      specific counting error in its Table~1 and replaces it with an
-      element-by-element model that agrees with the paper's own measurements to
-      three significant figures (Sections~\ref{sec:res-flops}
-      and~\ref{sec:res-sparse}).
+      specific counting error in its Table~1 --- visible in the paper's own
+      text --- and replaces it with an element-by-element model whose predicted
+      constant-factor saving is the size the paper actually measured, where its
+      published model overestimates by more than an order of magnitude
+      (Sections~\ref{sec:res-flops} and~\ref{sec:res-sparse}).
 \item A stage-resolved timing decomposition that isolates the one step the
       paper's analysis is actually about, and shows that it does speed up as
       predicted while the end-to-end solve does not
@@ -299,7 +301,7 @@ factorised once before the iteration begins. Both standard variants are
 implemented: \texttt{XB} drops series resistance from $B'$, \texttt{BX} from
 $B''$. FDLF is the natural control for this study, because it represents the
 limit of the paper's own strategy --- a Jacobian that costs nothing to rebuild
---- at the price of linear convergence.
+- at the price of linear convergence.
 
 \subsection{Gauss--Seidel (GS)}
 Included as the classical baseline, GS applies the rearranged nodal equation
@@ -317,7 +319,7 @@ rescaled onto its magnitude set-point.
 A further extension implements \emph{chord} iterations of both NR formulations:
 the Jacobian is built and LU-factorised once (or refreshed every $k$
 iterations), and subsequent steps reuse the stored factors through forward and
-back substitution alone. This isolates the question the base paper raises ---
+back substitution alone. This isolates the question the base paper raises -
 how much of an iteration is really the Jacobian rebuild --- by removing that
 cost entirely rather than reducing it. Section~\ref{sec:res-chord} reports the
 outcome, which turns out to be the largest single result of the project.
@@ -417,10 +419,10 @@ equation~\eqref{eq:ratio-degree}.}
 \toprule
 Label & System & $n$ & $n_\ell$ & $n_{pv}$ & $n_{pq}$ & $d$ \\
 \midrule
----  & case3\_saadat     & 3   & 3   & 1  & 1   & 2.00 \\
+-  & case3\_saadat     & 3   & 3   & 1  & 1   & 2.00 \\
 TC1  & case5\_stagg      & 5   & 7   & 0  & 4   & 2.80 \\
 TC2  & case6ww           & 6   & 11  & 2  & 3   & 3.67 \\
----  & case14\_ieee      & 14  & 20  & 4  & 9   & 2.86 \\
+-  & case14\_ieee      & 14  & 20  & 4  & 9   & 2.86 \\
 TC3  & case24\_ieee\_rts & 24  & 38  & 10 & 13  & 2.83 \\
 TC4  & case30\_ieee      & 30  & 41  & 5  & 24  & 2.73 \\
 TC5  & case57\_ieee      & 57  & 80  & 6  & 50  & 2.74 \\
@@ -433,8 +435,9 @@ EX2  & case300\_ieee     & 300 & 411 & 68 & 231 & 2.73 \\
 \paragraph{A caveat on the paper's Table~3.}
 The paper states that its test systems were ``modified'' but never says how, and
 the bus voltages printed in its Table~3 are not those of the standard IEEE
-cases --- several of its 24-bus voltages sit near $0.46-j0.91$~p.u., which no
-healthy transmission network produces. The unmodified library cases are
+cases. Several of its 24-bus voltages sit near $0.46-j0.91$~p.u.: the magnitude
+is normal, but the angle is $-63^\circ$ from the slack bus, a spread no
+normally-operating transmission network shows. The unmodified library cases are
 therefore used here, and the paper's Table~3 is \emph{not} reproducible number
 for number; the solutions this project obtains for TC1--TC5 are tabulated in
 \texttt{03\_table3\_solutions}, where the two NR formulations agree with each
@@ -473,7 +476,7 @@ matplotlib~3.11.2~\cite{numpy,scipy,matplotlib,pandas}.
 
 \subsection{Verification Strategy}
 Correctness is established before any performance claim is made. The test suite
-contains 245 tests covering four levels:
+contains 285 tests covering four levels:
 
 \begin{enumerate}
 \item \textbf{Against the paper.} The Y-bus, the mismatch vector, the full
@@ -543,7 +546,7 @@ $Y_{33}$ & 67.23095 & 67.2310 & $-67.24902$ & $-67.25$ & 5.47e$-$05 \\
 \end{table}
 
 Table~\ref{tab:iterations} carries the per-iteration comparison. The first
-Jacobian matches to \emph{every printed digit} --- an exact zero difference ---
+Jacobian matches to \emph{every printed digit} --- an exact zero difference -
 and the later iterations differ only at the level the paper's four-decimal
 rounding of its own intermediate voltages propagates to. The relative column is
 normalised by the largest entry of the paper's own vector or matrix and
@@ -592,16 +595,26 @@ $\delta_2$ (deg)  & $-2.6965$ & $-2.696$ & $-2.6965$ & $-2.698$ \\
 $|V_3|$ (p.u.)    & 1.040000  & 1.04000  & 1.040000  & 1.04000 \\
 $\delta_3$ (deg)  & $-0.4988$ & $-0.4988$& $-0.4988$ & $-0.4979$ \\
 $Q_3$ (p.u.)      & 1.461769  & 1.46170  & 1.461769  & 1.46180 \\
+Max.\ mismatch    & 2.17e$-$4 & 2.2e$-$4 & 4.03e$-$4 & 4.0e$-$4 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Figure~\ref{fig:fig4} reproduces the paper's Figure~4. Both series show the
+Figure~\ref{fig:fig4} reproduces the paper's Figure~4. Over the three iterations
+the paper plots, the two methods track each other closely and end at
+$2.17\times10^{-4}$ and $4.03\times10^{-4}$ --- the values its Table~2 records as
+$2.2\times10^{-4}$~p.u.\ power and $4.0\times10^{-4}$~p.u.\ current. The paper's
+own conclusion for this example, that there is no significant difference between
+the two convergences, is reproduced exactly.
+
+Carried past the window the paper plots, they separate. Both show the
 roughly-doubling number of correct digits per iteration characteristic of
-quadratic Newton convergence. The standard method reaches machine precision in
-four iterations ($7.6\times10^{-15}$) while the simplified method needs six
-($5.4\times10^{-14}$) --- the first visible symptom of the PV-bus treatment
-discussed in Section~\ref{sec:method-pv}, on a system with a single PV bus.
+quadratic Newton convergence, but the standard method reaches machine precision
+in four iterations ($7.6\times10^{-15}$) while the simplified method needs six
+($5.4\times10^{-14}$). On a system with a single PV bus the gap is one the paper
+had no reason to notice; it is nonetheless the first visible symptom of the
+PV-bus treatment of Section~\ref{sec:method-pv}, and
+Section~\ref{sec:res-scale} shows what it becomes at scale.
 
 \begin{figure}[t]
     \centering
@@ -614,7 +627,7 @@ discussed in Section~\ref{sec:method-pv}, on a system with a single PV bus.
 
 \subsection{Operation Counts: Published versus Audited}
 \label{sec:res-flops}
-The paper's symbolic counts reproduce exactly. Every form is recovered ---
+The paper's symbolic counts reproduce exactly. Every form is recovered -
 $3(n-1)$ and $3(n-1)(n-2)$ for the diagonal and off-diagonal blocks of $J_1$
 and $J_3$ under SNR, $2(n-1)+3$ and $2(n-1)(n-2)$ for $J_2$ and $J_4$, against
 $4(n-2)$ and $2(n-2)$ or $(n-2)$ for PNR. Table~\ref{tab:table1} gives the
@@ -662,9 +675,23 @@ $n$ & SNR total & PNR total & Claimed ratio \\
 A dense Jacobian has $O(n^2)$ entries, and the paper's own equations (9), (11),
 (13) and (15) give every one of them a \emph{distinct} admittance $Y_{ki}$. Each
 entry therefore needs at least one multiplication of its own, and a cost linear
-in $n$ is impossible. Inspecting the arithmetic, Table~1 counts the off-diagonal
-work once per matrix \emph{row} rather than once per \emph{entry}: that is
-exactly what collapses the $(n-1)(n-2)$ off-diagonal population into $(n-2)$.
+in $n$ is impossible.
+
+The slip is visible in the paper's own derivation, and does not have to be
+inferred. Discussing $J_1$, it states that equation (9) costs two
+multiplications per element and equation (19), its standard-method counterpart,
+three; that there are $(n-1)\times(n-2)$ off-diagonal elements; and therefore
+that the standard method needs $3\times(n-1)\times(n-2)$. It then charges the
+proposed method $2\times(n-2)$ --- two multiplications applied to one
+\emph{row}'s worth of elements, not to the $(n-1)\times(n-2)$ it had just
+counted. The same substitution is made for $J_2$, $J_3$ and $J_4$, and it is
+exactly what turns Table~1's bottom line from quadratic into linear.
+
+Applying the paper's own per-element costs consistently already removes the
+effect: summing its four sub-matrices gives $3+2+3+2 = 10$ multiplications per
+off-diagonal entry for the standard method against $2+1+2+1 = 6$ for the
+proposed one, a ratio of $10/6 = 1.67$ --- a constant, with both methods
+$O(n^2)$.
 
 \paragraph{An honest recount.}
 To test whether the paper's \emph{conclusion} survives its arithmetic, the same
@@ -733,14 +760,23 @@ $n$ & Audited SNR & Audited PNR & Audited & Published \\
 \end{figure}
 
 \paragraph{The conclusion survives.}
-For the Jacobian alone the audited model predicts a ratio of $\mathbf{1.733}$ at
-the 57-bus size of the paper's largest test case --- against the $\mathbf{1.728}$
-the paper actually \emph{measured} there. The paper's own measurement therefore
-agrees with the audited count to three significant figures and is inconsistent
-with its own Table~1, which would have predicted $25.9$. This is the central
-analytical result of the project: the base paper reaches a correct conclusion
-through an incorrect calculation, and the corrected calculation explains its
-experimental data far better than the published one does.
+The two models differ by more than an order of magnitude in what they predict,
+and only one of them is the size of anything the paper measured. At 57 buses,
+its largest test case, Table~1 predicts a Jacobian saving of
+$\mathbf{25.9\times}$; the corrected models predict $1.67$--$1.80\times$; and the
+paper's own Table~5 reports total-time ratios of $1.13$--$1.73\times$ across all
+five systems. The corrected count is the right order of magnitude throughout,
+the published one is not.
+
+The comparison should not be pushed further than that. The paper's $1.728$ is a
+\emph{total solve time} ratio that also embeds a 4-versus-3 iteration advantage
+on that case, so it is not a per-iteration Jacobian measurement and cannot be set
+against $1.73$ digit for digit. What the agreement in magnitude does establish is
+the central analytical result of this project: the base paper reaches a correct
+conclusion through an incorrect calculation, and the corrected calculation is
+consistent with its experimental data where the published one is off by a factor
+of fifteen. Section~\ref{sec:res-stages} measures the per-iteration quantity
+directly.
 
 \subsection{Cost over the True Sparsity Pattern}
 \label{sec:res-sparse}
@@ -979,7 +1015,7 @@ the formulations.
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.95\linewidth]{results/figures/03_jacobian_stage_time.png}
-    \caption{Jacobian derivative evaluation per iteration, timed on its own ---
+    \caption{Jacobian derivative evaluation per iteration, timed on its own -
     the one step the paper's FLOP analysis is about.}
     \label{fig:stage-time}
 \end{figure}
@@ -1052,7 +1088,7 @@ dense LU), not by the formulation of the derivatives.
 \paragraph{PNR+ repairs the defect.}
 Making reactive power a genuine Newton unknown restores an almost-flat iteration
 count --- exponent $0.101$, within one iteration of SNR on every system tested
---- while retaining the cheaper derivative evaluation. At 300 buses PNR+ solves
+- while retaining the cheaper derivative evaluation. At 300 buses PNR+ solves
 in $30.4$~ms against PNR's $53.9$~ms, a $1.77\times$ improvement obtained purely
 by fixing the PV treatment. RCI behaves similarly ($6$ iterations at 300 buses),
 confirming that the deficiency is specific to lagging $Q$ and not to
@@ -1078,7 +1114,7 @@ Figures~\ref{fig:scale-iters} and~\ref{fig:scale-time} show both trends.
 \paragraph{The derivative advantage does grow, as predicted.}
 Table~\ref{tab:deriv-ratio} and Figure~\ref{fig:deriv-ratio} isolate the
 derivative stage across the full size range. The ratio climbs from $1.13$ at 3
-buses to $1.60$ at 300 --- approaching the audited dense asymptote of $1.80$ ---
+buses to $1.60$ at 300 --- approaching the audited dense asymptote of $1.80$ -
 while the whole-iteration ratio never leaves the neighbourhood of $1.1$. The
 paper's mechanism is real; it is simply confined to a minority of the work.
 
@@ -1159,7 +1195,7 @@ Table~\ref{tab:methods} places all seven solvers on all seven systems.
 \centering
 \caption{All seven solvers on all test systems. Flat start, $10^{-6}$~p.u.\
 maximum voltage correction; Gauss--Seidel is given a 3000-sweep budget and the
-Newton methods 60. Best of 10 repeats. \texttt{---} marks non-convergence.}
+Newton methods 60. Best of 10 repeats. \texttt{-} marks non-convergence.}
 \label{tab:methods}
 \small
 \begin{tabular}{l r r r r r r r r r r r r r r r}
@@ -1175,7 +1211,7 @@ case24\_ieee\_rts & 24  & 4 & 7  & 5 & 5 & 6  & 6  & 76    & 0.60  & 1.03  & 0.7
 case30\_ieee      & 30  & 4 & 5  & 4 & 4 & 8  & 6  & 100   & 0.67  & 0.86  & 0.70  & 0.90  & 1.32 & 1.17 & 17.5 \\
 case57\_ieee      & 57  & 5 & 6  & 4 & 4 & 7  & 7  & 117   & 1.70  & 2.27  & 1.61  & 1.93  & 2.03 & 2.03 & 37.0 \\
 case118\_ieee     & 118 & 4 & 12 & 5 & 6 & 8  & 6  & 378   & 2.72  & 8.42  & 4.84  & 7.09  & 2.63 & \textbf{2.35} & 502 \\
-case300\_ieee     & 300 & 5 & 13 & 6 & 6 & 11 & 11 & \textbf{---} & \textbf{22.4} & 55.6 & 31.7 & 33.1 & 42.2 & 165 & $>$10\,200 \\
+case300\_ieee     & 300 & 5 & 13 & 6 & 6 & 11 & 11 & \textbf{-} & \textbf{22.4} & 55.6 & 31.7 & 33.1 & 42.2 & 165 & $>$10\,200 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -1252,9 +1288,9 @@ all seven test systems.}
 \toprule
 Solver & Max.\ $|V - V_{\mathrm{ref}}|$ (p.u.) & Note \\
 \midrule
-SNR     & 2.1e$-$13 & reference formulation \\
+SNR     & 2.4e$-$13 & reference formulation \\
 PNR     & 3.9e$-$07 & within requested $10^{-6}$ \\
-PNR+    & 3.0e$-$14 & \\
+PNR+    & 6.5e$-$14 & \\
 RCI     & 5.5e$-$14 & \\
 FDLF-XB & 1.2e$-$07 & \\
 FDLF-BX & 1.1e$-$07 & \\
@@ -1500,7 +1536,7 @@ factorisation instead of the 5--13 the Newton methods perform.
 
 \begin{table*}[t]
 \centering
-\caption{Chord iterations against their Newton counterparts. \texttt{---} marks
+\caption{Chord iterations against their Newton counterparts. \texttt{-} marks
 non-convergence within the 150-iteration budget. Absolute times are not
 comparable with Tables~\ref{tab:table5} and~\ref{tab:methods}: this experiment
 pins BLAS to a single thread so that substitution-only iterations are timed
@@ -1522,7 +1558,7 @@ case24\_ieee\_rts & 24  & 10 & 4 & 7  & \textbf{57} & 10 & 0.57 & 1.01 & 3.32 & 
 case30\_ieee      & 30  & 5  & 4 & 5  & 6  & 6  & 0.65  & 0.82  & 0.54 & 0.47 & 1.52 & 1.40 \\
 case57\_ieee      & 57  & 6  & 5 & 6  & 13 & 10 & 1.24  & 1.47  & 1.11 & 0.80 & 1.32 & 1.56 \\
 case118\_ieee     & 118 & 53 & 4 & 12 & 21 & 9  & 2.07  & 5.94  & 2.29 & 1.16 & 2.59 & 1.79 \\
-case300\_ieee     & 300 & 68 & 5 & 13 & \textbf{---} & 16 & 27.93 & 62.65 & --- & \textbf{9.79} & --- & \textbf{2.85} \\
+case300\_ieee     & 300 & 68 & 5 & 13 & \textbf{-} & 16 & 27.93 & 62.65 & - & \textbf{9.79} & - & \textbf{2.85} \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -1568,9 +1604,12 @@ making it $3.3\times$ \emph{slower} than ordinary PNR. The explanation is the
 one that has recurred throughout this report. Freezing the Jacobian already
 reduces the method to a linear iteration; the paper's lagged-$Q$ treatment is a
 second linear iteration layered on top, and the two contraction factors compound.
-Measured chord convergence rates make this explicit: $0.24$--$0.40$ for
-\texttt{SNR-chord} on the large systems against $0.57$--$0.79$ for
-\texttt{PNR-chord}.
+Measured chord convergence rates make this explicit, and tie the degradation to
+the PV-bus fraction rather than to size. On the three PV-dense systems --- 24-,
+118- and 300-bus, with $42\%$, $45\%$ and $23\%$ of buses voltage-controlled ---
+\texttt{PNR-chord} contracts at $0.79$, $0.57$ and $0.61$ against
+$0.24$--$0.40$ for \texttt{SNR-chord}. On the 57-bus system, where only $11\%$
+of buses are PV, it recovers to $0.34$.
 
 Figure~\ref{fig:chord-conv} shows the convergence traces. The chord curves are
 straight lines, as a stationary linear iteration must be, and their slopes are
@@ -1587,13 +1626,13 @@ the rates quoted above; the per-iteration data is tabulated in
     \includegraphics[width=0.325\textwidth]{results/extension_chord/figures/08_fig10_convergence_TC5.png}
     \caption{Convergence of the Newton and chord variants. Top row, left to
     right: 3-bus worked example, TC1 (5-bus), TC2 (6-bus). Bottom row: TC3
-    (24-bus), TC4 (30-bus), TC5 (57-bus). The chord traces are straight ---
+    (24-bus), TC4 (30-bus), TC5 (57-bus). The chord traces are straight -
     linear convergence --- and \texttt{PNR-chord} on TC3 is nearly flat.}
     \label{fig:chord-conv}
 \end{figure*}
 
 \paragraph{What this says about the base paper.}
-The paper's premise --- that the Jacobian rebuild is the cost worth attacking ---
+The paper's premise --- that the Jacobian rebuild is the cost worth attacking -
 is correct, and this experiment confirms it from the opposite direction. Its
 chosen remedy is simply far too conservative. Making the rebuild $1.6\times$
 cheaper saves about $11\%$ of an iteration at 300 buses; skipping the rebuild and
@@ -1639,16 +1678,18 @@ Table~1 of the paper counts off-diagonal Jacobian work once per matrix row
 rather than once per entry, which is what makes the cost appear linear in $n$. A
 dense Jacobian cannot be filled in linear time, because each of its $O(n^2)$
 entries carries a distinct $Y_{ki}$. An element-by-element recount gives both
-methods a quadratic cost separated by a constant factor approaching
-$9/5 = 1.80$ --- and predicts $1.733$ at 57 buses against the $1.728$ the paper
-\emph{measured}. The corrected model explains the paper's own data to three
-significant figures; the published model overestimates it by a factor of fifteen
-(Section~\ref{sec:res-flops}).
+methods a quadratic cost separated by a constant factor of $1.67$--$1.80$. That
+is the size of saving the paper's own Table~5 reports ($1.13$--$1.73\times$);
+its Table~1 would have predicted $25.9\times$ at 57 buses. The corrected model is
+the right order of magnitude throughout; the published model overestimates by a
+factor of fifteen (Section~\ref{sec:res-flops}).
 
 \paragraph{3. The saving is real but structurally confined, and is more than
 cancelled by a flaw in the PV handling.}
 Three independent measurements converge on this. The derivative stage alone
-speeds up by $1.21$--$1.60\times$, rising with system size exactly as predicted
+speeds up by $1.21$--$1.31\times$ on the paper's own test systems and
+$1.51$--$1.60\times$ at 118 and 300 buses, rising with system size as predicted,
+with a single outlier at 57 buses measuring $0.98\times$
 (Tables~\ref{tab:stages} and~\ref{tab:deriv-ratio}). But that stage is only a
 quarter of an iteration; $51$--$74\%$ of the work is block assembly and LU
 factorisation, which are identical in the two formulations, so the
@@ -1737,12 +1778,12 @@ implementation, the test systems and the complete result set are publicly
 available at
 
 \begin{center}
-\url{https://github.com/hm-aktaruzzaman-mukdho/numerical_project_402}
+\url{https://github.com/Diganta81/numerical_project_402}
 \end{center}
 
 \noindent The main result set regenerates with \texttt{python run\_all.py} in
 approximately two minutes; the chord study of Section~\ref{sec:res-chord} is a
-separate script, \texttt{scripts/08\_ext\_chord\_method.py}; and the 245-test
+separate script, \texttt{scripts/08\_ext\_chord\_method.py}; and the 285-test
 suite runs with \texttt{python -m pytest}. Every figure has a companion table of
 the same name under \texttt{results/}, written as CSV and Markdown, carrying the
 numbers behind it, so each claim made above can be checked against the data that
